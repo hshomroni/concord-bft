@@ -332,6 +332,7 @@ PreProcessor::PreProcessor(shared_ptr<MsgsCommunicator> &msgsCommunicator,
                            metricsComponent_.RegisterAtomicGauge("preProcessingTimeAvg", 0),
                            metricsComponent_.RegisterAtomicGauge("launchAsyncPreProcessJobTimeAvg", 0),
                            metricsComponent_.RegisterAtomicGauge("PreProcInFlyRequestsNum", 0)},
+      lastPreExeDuration{metricsComponent_.RegisterGauge("last_pre_execution_duration", 0)},
       totalPreProcessingTime_(true),
       launchAsyncJobTimeAvg_(true),
       preExecReqStatusCheckPeriodMilli_(myReplica_.getReplicaConfig().preExecReqStatusCheckTimerMillisec),
@@ -1319,6 +1320,19 @@ void PreProcessor::finalizePreProcessing(NodeIdType clientId, uint16_t reqOffset
       incomingMsgsStorage_->pushExternalMsg(move(preProcessMsg));
 
       releaseClientPreProcessRequest(reqEntry, COMPLETE);
+
+      using namespace std::chrono;
+
+      if (pre_exe_time_start_stamps_.count(cid) != 0) {
+        lastPreExeDuration.Get().Set(
+            duration_cast<milliseconds>(getMonotonicTime() - pre_exe_time_start_stamps_[cid]).count());
+        pre_exe_time_start_stamps_.erase(cid);
+      }
+
+      if (pre_exe_time_start_stamps_.size() > 1000) {
+        pre_exe_time_start_stamps_.clear();
+      }
+
       LOG_INFO(logger(), "Pre-processing completed for" << KVLOG(cid, batchCid, reqSeqNum, clientId, reqOffsetInBatch));
     }
   }
@@ -1492,6 +1506,9 @@ bool PreProcessor::registerRequestOnPrimaryReplica(const string &batchCid,
                                                    PreProcessRequestMsgSharedPtr &preProcessRequestMsg,
                                                    uint16_t reqOffsetInBatch,
                                                    RequestStateSharedPtr reqEntry) {
+  if (pre_exe_time_start_stamps_.count(clientReqMsg->getCid()) == 0)
+    pre_exe_time_start_stamps_[clientReqMsg->getCid()] = getMonotonicTime();
+
   (reqEntry->reqRetryId)++;
   countRetriedRequests(clientReqMsg, reqEntry);
   const auto reqSeqNum = clientReqMsg->requestSeqNum();
@@ -1520,7 +1537,7 @@ bool PreProcessor::registerRequestOnPrimaryReplica(const string &batchCid,
                                         clientReqMsg->result());
   const auto registerSucceeded =
       registerRequest(batchCid, batchSize, move(clientReqMsg), preProcessRequestMsg, reqOffsetInBatch);
-  if (registerSucceeded)
+  if (registerSucceeded) {
     LOG_INFO(logger(),
              "Start request processing by a primary replica" << KVLOG(reqSeqNum,
                                                                       batchCid,
@@ -1530,6 +1547,11 @@ bool PreProcessor::registerRequestOnPrimaryReplica(const string &batchCid,
                                                                       senderId,
                                                                       requestTimeoutMilli,
                                                                       blockId));
+
+  } else {
+    pre_exe_time_start_stamps_.erase(clientReqMsg->getCid());
+  }
+
   return registerSucceeded;
 }
 

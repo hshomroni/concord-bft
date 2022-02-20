@@ -354,6 +354,13 @@ class PreProcessor {
     concordMetrics::AtomicGaugeHandle launchAsyncPreProcessJobTimeAvg;
     concordMetrics::AtomicGaugeHandle preProcInFlyRequestsNum;
   } preProcessorMetrics_;
+
+  // performance metrics hanan
+  concordMetrics::GaugeHandle lastPreExeDuration;
+  RollingAvgAndVar pre_exe_duration;
+  std::unordered_map<std::string, std::chrono::time_point<std::chrono::steady_clock>> pre_exe_time_start_stamps_;
+  // end hanan
+
   bftEngine::impl::RollingAvgAndVar totalPreProcessingTime_;
   bftEngine::impl::RollingAvgAndVar launchAsyncJobTimeAvg_;
   concordUtil::Timers::Handle requestsStatusCheckTimer_;
