@@ -331,8 +331,8 @@ PreProcessor::PreProcessor(shared_ptr<MsgsCommunicator> &msgsCommunicator,
                            metricsComponent_.RegisterCounter("preProcReqRetried"),
                            metricsComponent_.RegisterAtomicGauge("preProcessingTimeAvg", 0),
                            metricsComponent_.RegisterAtomicGauge("launchAsyncPreProcessJobTimeAvg", 0),
-                           metricsComponent_.RegisterAtomicGauge("PreProcInFlyRequestsNum", 0)},
-      lastPreExeDuration{metricsComponent_.RegisterGauge("last_pre_execution_duration", 0)},
+                           metricsComponent_.RegisterAtomicGauge("PreProcInFlyRequestsNum", 0),
+                           metricsComponent_.RegisterAtomicGauge("preExeDurationAvg", 0)},
       totalPreProcessingTime_(true),
       launchAsyncJobTimeAvg_(true),
       preExecReqStatusCheckPeriodMilli_(myReplica_.getReplicaConfig().preExecReqStatusCheckTimerMillisec),
@@ -1321,16 +1321,20 @@ void PreProcessor::finalizePreProcessing(NodeIdType clientId, uint16_t reqOffset
 
       releaseClientPreProcessRequest(reqEntry, COMPLETE);
 
-      using namespace std::chrono;
-
       if (pre_exe_time_start_stamps_.count(cid) != 0) {
-        lastPreExeDuration.Get().Set(
-            duration_cast<milliseconds>(getMonotonicTime() - pre_exe_time_start_stamps_[cid]).count());
+        auto end2EndPreExeDuration =
+            std::chrono::duration_cast<std::chrono::milliseconds>(getMonotonicTime() - pre_exe_time_start_stamps_[cid])
+                .count();
+
+        pre_exe_duration_.add(static_cast<double>(end2EndPreExeDuration));
+
+        preProcessorMetrics_.preExeDurationAvg.Get().Set((uint64_t)pre_exe_duration_.avg());
         pre_exe_time_start_stamps_.erase(cid);
       }
 
       if (pre_exe_time_start_stamps_.size() > 1000) {
         pre_exe_time_start_stamps_.clear();
+        pre_exe_duration_.reset();
       }
 
       LOG_INFO(logger(), "Pre-processing completed for" << KVLOG(cid, batchCid, reqSeqNum, clientId, reqOffsetInBatch));
@@ -1506,6 +1510,7 @@ bool PreProcessor::registerRequestOnPrimaryReplica(const string &batchCid,
                                                    PreProcessRequestMsgSharedPtr &preProcessRequestMsg,
                                                    uint16_t reqOffsetInBatch,
                                                    RequestStateSharedPtr reqEntry) {
+  // register this cid's pre-exe start time so later its duration can be measured
   if (pre_exe_time_start_stamps_.count(clientReqMsg->getCid()) == 0)
     pre_exe_time_start_stamps_[clientReqMsg->getCid()] = getMonotonicTime();
 
@@ -1549,6 +1554,7 @@ bool PreProcessor::registerRequestOnPrimaryReplica(const string &batchCid,
                                                                       blockId));
 
   } else {
+    // delete this cid from time stamp map cause registration failed
     pre_exe_time_start_stamps_.erase(clientReqMsg->getCid());
   }
 
