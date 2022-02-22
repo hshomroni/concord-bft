@@ -10,6 +10,7 @@
 
 #include "RollingAvgAndVar.hpp"
 #include "Metrics.hpp"
+#include "Logger.hpp"
 
 #define getMonotonicTime std::chrono::steady_clock::now
 
@@ -23,7 +24,9 @@ class PerfMetric {
       : num_map_entries_for_reset_(num_map_entries_for_reset),
         name_(name),
         avg_{component.RegisterGauge(name + "Avg", 0)},
-        variance_{component.RegisterGauge(name + "Variance", 0)} {}
+        variance_{component.RegisterGauge(name + "Variance", 0)} {
+    LOG_INFO(GL, "Hanan: built perf metric, name: " << name);
+  }
 
   void addStartTimeStamp(bool isPrimary, string key) {
     if (!isPrimary) return;
