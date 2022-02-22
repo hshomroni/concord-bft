@@ -316,6 +316,17 @@ class ReplicaImp : public InternalReplicaApi, public ReplicaForStateTransfer {
   RollingAvgAndVar accumulating_batch_time_;
   Time time_to_collect_batch_ = MinTime;
 
+  // performance metrics hanan
+  RollingAvgAndVar consensus_duration_;
+  std::unordered_map<std::string, std::chrono::time_point<std::chrono::steady_clock>> consensus_start_time_stamps_;
+  GaugeHandle metric_consensus_duration_avg_;
+  GaugeHandle metric_consensus_duration_variance_;
+
+  RollingAvgAndVar post_exe_duration_;
+  std::unordered_map<std::string, std::chrono::time_point<std::chrono::steady_clock>> post_exe_start_time_stamps_;
+  GaugeHandle metric_post_exe_duration_avg_;
+  GaugeHandle metric_post_exe_duration_variance_;
+
  public:
   ReplicaImp(const ReplicaConfig&,
              shared_ptr<IRequestsHandler>,

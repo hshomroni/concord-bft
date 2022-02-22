@@ -876,12 +876,20 @@ void ReplicaImp::startConsensusProcess(PrePrepareMsg *pp) {
 void ReplicaImp::startConsensusProcess(PrePrepareMsg *pp, bool isCreatedEarlier) {
   if (!isCurrentPrimary()) return;
   TimeRecorder scoped_timer(*histograms_.startConsensusProcess);
+
   auto firstPath = pp->firstPath();
   if (config_.getdebugStatisticsEnabled()) {
     DebugStatistics::onSendPrePrepareMessage(pp->numberOfRequests(), requestsQueueOfPrimary.size());
   }
   metric_bft_batch_size_.Get().Set(pp->numberOfRequests());
   primaryLastUsedSeqNum++;
+
+  // guaranteed to be in primary
+  // hanan
+  if (consensus_start_time_stamps_.count(to_string(primaryLastUsedSeqNum)) == 0) {
+    consensus_start_time_stamps_[to_string(primaryLastUsedSeqNum)] = getMonotonicTime();
+  }
+
   if (isCreatedEarlier) {
     controller->onSendingPrePrepare(primaryLastUsedSeqNum, firstPath);
     pp->setSeqNumber(primaryLastUsedSeqNum);
@@ -1491,6 +1499,26 @@ void ReplicaImp::onMessage<FullCommitProofMsg>(FullCommitProofMsg *msg) {
       SCOPED_MDC_PATH(CommitPathToMDCString(commitPath));
       LOG_INFO(CNSUS, "Added FullCommitProof to verification queue" << KVLOG(msg->senderId(), msgSeqNum, msg->size()));
       return;  // We've added the msg -- don't delete!
+    }
+  }
+
+  // hanan
+  if (isCurrentPrimary()) {
+    if (consensus_start_time_stamps_.count(to_string(msgSeqNum)) != 0) {
+      auto consensusDuration = std::chrono::duration_cast<std::chrono::milliseconds>(
+                                   getMonotonicTime() - consensus_start_time_stamps_[to_string(msgSeqNum)])
+                                   .count();
+
+      consensus_duration_.add(static_cast<double>(consensusDuration));
+
+      metric_consensus_duration_avg_.Get().Set((uint64_t)consensus_duration_.avg());
+      metric_consensus_duration_variance_.Get().Set((uint64_t)consensus_duration_.var());
+      consensus_start_time_stamps_.erase(to_string(msgSeqNum));
+    }
+
+    if (consensus_start_time_stamps_.size() > 1000) {
+      consensus_start_time_stamps_.clear();
+      consensus_duration_.reset();
     }
   }
 
@@ -2442,6 +2470,13 @@ void ReplicaImp::onMessage<AskForCheckpointMsg>(AskForCheckpointMsg *msg) {
 void ReplicaImp::startExecution(SeqNum seqNumber,
                                 concordUtils::SpanWrapper &span,
                                 bool askForMissingInfoAboutCommittedItems) {
+  // hanan
+  if (isCurrentPrimary()) {
+    if (post_exe_start_time_stamps_.count(to_string(seqNumber)) == 0) {
+      post_exe_start_time_stamps_[to_string(seqNumber)] = getMonotonicTime();
+    }
+  }
+
   consensus_times_.end(seqNumber);
   tryToRemovePendingRequestsForSeqNum(seqNumber);  // TODO(LG) Should verify if needed
   LOG_INFO(CNSUS, "Starting execution of seqNumber:" << seqNumber);
@@ -4333,6 +4368,10 @@ ReplicaImp::ReplicaImp(bool firstTime,
       metric_total_preexec_requests_executed_{metrics_.RegisterCounter("totalPreExecRequestsExecuted")},
       metric_received_restart_ready_{metrics_.RegisterCounter("receivedRestartReadyMsg", 0)},
       metric_received_restart_proof_{metrics_.RegisterCounter("receivedRestartProofMsg", 0)},
+      metric_consensus_duration_avg_{metrics_.RegisterGauge("consensusDurationAvg", 0)},
+      metric_consensus_duration_variance_{metrics_.RegisterGauge("consensusDurationVariance", 0)},
+      metric_post_exe_duration_avg_{metrics_.RegisterGauge("postExeDurationAvg", 0)},
+      metric_post_exe_duration_variance_{metrics_.RegisterGauge("postExeDurationVariance", 0)},
       consensus_times_(histograms_.consensus),
       checkpoint_times_(histograms_.checkpointFromCreationToStable),
       time_in_active_view_(histograms_.timeInActiveView),
@@ -5110,6 +5149,28 @@ void ReplicaImp::finishExecutePrePrepareMsg(PrePrepareMsg *ppMsg,
   }
 
   updateLimitsAndMetrics(ppMsg);
+
+  // hanan
+
+  // hanan
+  if (isCurrentPrimary()) {
+    if (post_exe_start_time_stamps_.count(to_string(ppMsg->seqNumber())) != 0) {
+      auto consensusDuration = std::chrono::duration_cast<std::chrono::milliseconds>(
+                                   getMonotonicTime() - post_exe_start_time_stamps_[to_string(ppMsg->seqNumber())])
+                                   .count();
+
+      post_exe_duration_.add(static_cast<double>(consensusDuration));
+
+      metric_post_exe_duration_avg_.Get().Set((uint64_t)post_exe_duration_.avg());
+      metric_post_exe_duration_variance_.Get().Set((uint64_t)post_exe_duration_.var());
+      post_exe_start_time_stamps_.erase(to_string(ppMsg->seqNumber()));
+    }
+
+    if (post_exe_start_time_stamps_.size() > 1000) {
+      post_exe_start_time_stamps_.clear();
+      post_exe_duration_.reset();
+    }
+  }
 
   tryToStartOrFinishExecution(false);
 }

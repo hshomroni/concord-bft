@@ -354,6 +354,7 @@ class PreProcessor {
     concordMetrics::AtomicGaugeHandle launchAsyncPreProcessJobTimeAvg;
     concordMetrics::AtomicGaugeHandle preProcInFlyRequestsNum;
     concordMetrics::AtomicGaugeHandle preExeDurationAvg;
+    concordMetrics::AtomicGaugeHandle preExeDurationVariance;
   } preProcessorMetrics_;
 
   // performance metrics hanan

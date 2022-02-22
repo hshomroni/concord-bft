@@ -332,7 +332,8 @@ PreProcessor::PreProcessor(shared_ptr<MsgsCommunicator> &msgsCommunicator,
                            metricsComponent_.RegisterAtomicGauge("preProcessingTimeAvg", 0),
                            metricsComponent_.RegisterAtomicGauge("launchAsyncPreProcessJobTimeAvg", 0),
                            metricsComponent_.RegisterAtomicGauge("PreProcInFlyRequestsNum", 0),
-                           metricsComponent_.RegisterAtomicGauge("preExeDurationAvg", 0)},
+                           metricsComponent_.RegisterAtomicGauge("preExeDurationAvg", 0),
+                           metricsComponent_.RegisterAtomicGauge("preExeDurationVariance", 0)},
       totalPreProcessingTime_(true),
       launchAsyncJobTimeAvg_(true),
       preExecReqStatusCheckPeriodMilli_(myReplica_.getReplicaConfig().preExecReqStatusCheckTimerMillisec),
@@ -1321,20 +1322,23 @@ void PreProcessor::finalizePreProcessing(NodeIdType clientId, uint16_t reqOffset
 
       releaseClientPreProcessRequest(reqEntry, COMPLETE);
 
-      if (pre_exe_time_start_stamps_.count(cid) != 0) {
-        auto end2EndPreExeDuration =
-            std::chrono::duration_cast<std::chrono::milliseconds>(getMonotonicTime() - pre_exe_time_start_stamps_[cid])
-                .count();
+      if (myReplica_.isCurrentPrimary()) {
+        if (pre_exe_time_start_stamps_.count(cid) != 0) {
+          auto end2EndPreExeDuration = std::chrono::duration_cast<std::chrono::milliseconds>(
+                                           getMonotonicTime() - pre_exe_time_start_stamps_[cid])
+                                           .count();
 
-        pre_exe_duration_.add(static_cast<double>(end2EndPreExeDuration));
+          pre_exe_duration_.add(static_cast<double>(end2EndPreExeDuration));
 
-        preProcessorMetrics_.preExeDurationAvg.Get().Set((uint64_t)pre_exe_duration_.avg());
-        pre_exe_time_start_stamps_.erase(cid);
-      }
+          preProcessorMetrics_.preExeDurationAvg.Get().Set((uint64_t)pre_exe_duration_.avg());
+          preProcessorMetrics_.preExeDurationVariance.Get().Set((uint64_t)pre_exe_duration_.var());
+          pre_exe_time_start_stamps_.erase(cid);
+        }
 
-      if (pre_exe_time_start_stamps_.size() > 1000) {
-        pre_exe_time_start_stamps_.clear();
-        pre_exe_duration_.reset();
+        if (pre_exe_time_start_stamps_.size() > 10000) {
+          pre_exe_time_start_stamps_.clear();
+          pre_exe_duration_.reset();
+        }
       }
 
       LOG_INFO(logger(), "Pre-processing completed for" << KVLOG(cid, batchCid, reqSeqNum, clientId, reqOffsetInBatch));
