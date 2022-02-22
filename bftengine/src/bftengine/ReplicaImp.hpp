@@ -43,6 +43,7 @@
 #include "FakeClock.hpp"
 #include <ccron/ticks_generator.hpp>
 #include "EpochManager.hpp"
+#include "PerfMetrics.hpp"
 
 namespace preprocessor {
 class PreProcessResultMsg;
@@ -326,6 +327,7 @@ class ReplicaImp : public InternalReplicaApi, public ReplicaForStateTransfer {
   std::unordered_map<std::string, std::chrono::time_point<std::chrono::steady_clock>> post_exe_start_time_stamps_;
   GaugeHandle metric_post_exe_duration_avg_;
   GaugeHandle metric_post_exe_duration_variance_;
+  PerfMetric hanan_consensus_duration_;
 
  public:
   ReplicaImp(const ReplicaConfig&,

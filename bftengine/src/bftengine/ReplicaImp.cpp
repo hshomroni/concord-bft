@@ -886,6 +886,8 @@ void ReplicaImp::startConsensusProcess(PrePrepareMsg *pp, bool isCreatedEarlier)
 
   // guaranteed to be in primary
   // hanan
+  LOG_INFO(GL, "Hanan 0");
+  hanan_consensus_duration_.addStartTimeStamp(true, to_string(primaryLastUsedSeqNum));
   if (consensus_start_time_stamps_.count(to_string(primaryLastUsedSeqNum)) == 0) {
     consensus_start_time_stamps_[to_string(primaryLastUsedSeqNum)] = getMonotonicTime();
   }
@@ -1503,6 +1505,8 @@ void ReplicaImp::onMessage<FullCommitProofMsg>(FullCommitProofMsg *msg) {
   }
 
   // hanan
+  LOG_INFO(GL, "Hanan 1");
+  hanan_consensus_duration_.finishMeasurement(isCurrentPrimary(), to_string(msgSeqNum));
   if (isCurrentPrimary()) {
     if (consensus_start_time_stamps_.count(to_string(msgSeqNum)) != 0) {
       auto consensusDuration = std::chrono::duration_cast<std::chrono::milliseconds>(
@@ -4372,6 +4376,7 @@ ReplicaImp::ReplicaImp(bool firstTime,
       metric_consensus_duration_variance_{metrics_.RegisterGauge("consensusDurationVariance", 0)},
       metric_post_exe_duration_avg_{metrics_.RegisterGauge("postExeDurationAvg", 0)},
       metric_post_exe_duration_variance_{metrics_.RegisterGauge("postExeDurationVariance", 0)},
+      hanan_consensus_duration_{metrics_, "hanan_consensus_duration__", 1000},
       consensus_times_(histograms_.consensus),
       checkpoint_times_(histograms_.checkpointFromCreationToStable),
       time_in_active_view_(histograms_.timeInActiveView),
