@@ -334,6 +334,7 @@ PreProcessor::PreProcessor(shared_ptr<MsgsCommunicator> &msgsCommunicator,
                            metricsComponent_.RegisterAtomicGauge("PreProcInFlyRequestsNum", 0),
                            metricsComponent_.RegisterAtomicGauge("preExeDurationAvg", 0),
                            metricsComponent_.RegisterAtomicGauge("preExeDurationVariance", 0)},
+      pre_exe_hanan{metricsComponent_, "pre_exe_hanan_", 10000},
       totalPreProcessingTime_(true),
       launchAsyncJobTimeAvg_(true),
       preExecReqStatusCheckPeriodMilli_(myReplica_.getReplicaConfig().preExecReqStatusCheckTimerMillisec),
@@ -1322,6 +1323,9 @@ void PreProcessor::finalizePreProcessing(NodeIdType clientId, uint16_t reqOffset
 
       releaseClientPreProcessRequest(reqEntry, COMPLETE);
 
+      // hana
+
+      pre_exe_hanan.finishMeasurement(myReplica_.isCurrentPrimary(), cid);
       if (myReplica_.isCurrentPrimary()) {
         if (pre_exe_time_start_stamps_.count(cid) != 0) {
           auto end2EndPreExeDuration = std::chrono::duration_cast<std::chrono::milliseconds>(
@@ -1515,6 +1519,8 @@ bool PreProcessor::registerRequestOnPrimaryReplica(const string &batchCid,
                                                    uint16_t reqOffsetInBatch,
                                                    RequestStateSharedPtr reqEntry) {
   // register this cid's pre-exe start time so later its duration can be measured
+  // hanan
+  pre_exe_hanan.addStartTimeStamp(myReplica_.isCurrentPrimary(), clientReqMsg->getCid());
   if (pre_exe_time_start_stamps_.count(clientReqMsg->getCid()) == 0)
     pre_exe_time_start_stamps_[clientReqMsg->getCid()] = getMonotonicTime();
 

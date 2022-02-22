@@ -33,6 +33,7 @@
 #include "SharedTypes.hpp"
 #include "RawMemoryPool.hpp"
 #include "GlobalData.hpp"
+#include "PerfMetrics.hpp"
 
 // TODO[TK] till boost upgrade
 #pragma GCC diagnostic push
@@ -358,7 +359,7 @@ class PreProcessor {
   } preProcessorMetrics_;
 
   // performance metrics hanan
-
+  PerfMetric pre_exe_hanan;
   RollingAvgAndVar pre_exe_duration_;
   std::unordered_map<std::string, std::chrono::time_point<std::chrono::steady_clock>> pre_exe_time_start_stamps_;
   // end hanan
