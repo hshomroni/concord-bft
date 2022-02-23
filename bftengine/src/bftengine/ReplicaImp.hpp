@@ -328,6 +328,8 @@ class ReplicaImp : public InternalReplicaApi, public ReplicaForStateTransfer {
   GaugeHandle metric_post_exe_duration_avg_;
   GaugeHandle metric_post_exe_duration_variance_;
   PerfMetric hanan_consensus_duration_;
+  PerfMetric hanan_post_exe_duration_;
+  PerfMetric hanan_primary_batching_duration_;
 
  public:
   ReplicaImp(const ReplicaConfig&,

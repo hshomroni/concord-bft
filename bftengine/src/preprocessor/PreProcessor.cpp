@@ -1323,27 +1323,27 @@ void PreProcessor::finalizePreProcessing(NodeIdType clientId, uint16_t reqOffset
 
       releaseClientPreProcessRequest(reqEntry, COMPLETE);
 
-      // hana
+      // hanan
 
       pre_exe_hanan.finishMeasurement(myReplica_.isCurrentPrimary(), cid);
-      if (myReplica_.isCurrentPrimary()) {
-        if (pre_exe_time_start_stamps_.count(cid) != 0) {
-          auto end2EndPreExeDuration = std::chrono::duration_cast<std::chrono::milliseconds>(
-                                           getMonotonicTime() - pre_exe_time_start_stamps_[cid])
-                                           .count();
+      // if (myReplica_.isCurrentPrimary()) {
+      //  if (pre_exe_time_start_stamps_.count(cid) != 0) {
+      //    auto end2EndPreExeDuration = std::chrono::duration_cast<std::chrono::milliseconds>(
+      //                                     getMonotonicTime() - pre_exe_time_start_stamps_[cid])
+      //                                     .count();
 
-          pre_exe_duration_.add(static_cast<double>(end2EndPreExeDuration));
+      //    pre_exe_duration_.add(static_cast<double>(end2EndPreExeDuration));
 
-          preProcessorMetrics_.preExeDurationAvg.Get().Set((uint64_t)pre_exe_duration_.avg());
-          preProcessorMetrics_.preExeDurationVariance.Get().Set((uint64_t)pre_exe_duration_.var());
-          pre_exe_time_start_stamps_.erase(cid);
-        }
+      //    preProcessorMetrics_.preExeDurationAvg.Get().Set((uint64_t)pre_exe_duration_.avg());
+      //    preProcessorMetrics_.preExeDurationVariance.Get().Set((uint64_t)pre_exe_duration_.var());
+      //    pre_exe_time_start_stamps_.erase(cid);
+      //  }
 
-        if (pre_exe_time_start_stamps_.size() > 10000) {
-          pre_exe_time_start_stamps_.clear();
-          pre_exe_duration_.reset();
-        }
-      }
+      //  if (pre_exe_time_start_stamps_.size() > 10000) {
+      //    pre_exe_time_start_stamps_.clear();
+      //    pre_exe_duration_.reset();
+      //  }
+      // }
 
       LOG_INFO(logger(), "Pre-processing completed for" << KVLOG(cid, batchCid, reqSeqNum, clientId, reqOffsetInBatch));
     }
@@ -1521,8 +1521,8 @@ bool PreProcessor::registerRequestOnPrimaryReplica(const string &batchCid,
   // register this cid's pre-exe start time so later its duration can be measured
   // hanan
   pre_exe_hanan.addStartTimeStamp(myReplica_.isCurrentPrimary(), clientReqMsg->getCid());
-  if (pre_exe_time_start_stamps_.count(clientReqMsg->getCid()) == 0)
-    pre_exe_time_start_stamps_[clientReqMsg->getCid()] = getMonotonicTime();
+  // if (pre_exe_time_start_stamps_.count(clientReqMsg->getCid()) == 0)
+  //  pre_exe_time_start_stamps_[clientReqMsg->getCid()] = getMonotonicTime();
 
   (reqEntry->reqRetryId)++;
   countRetriedRequests(clientReqMsg, reqEntry);

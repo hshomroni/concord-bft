@@ -483,6 +483,7 @@ void ReplicaImp::onMessage<ClientRequestMsg>(ClientRequestMsg *m) {
       if (clientsManager->canBecomePending(clientId, reqSeqNum)) {
         LOG_DEBUG(CNSUS, "Pushing to primary queue, request " << KVLOG(reqSeqNum, clientId, senderId));
         if (time_to_collect_batch_ == MinTime) time_to_collect_batch_ = getMonotonicTime();
+        hanan_primary_batching_duration_.addStartTimeStamp(true, m->getCid());
         requestsQueueOfPrimary.push(m);
         primaryCombinedReqSize += m->size();
         primary_queue_size_.Get().Set(requestsQueueOfPrimary.size());
@@ -724,6 +725,7 @@ ClientRequestMsg *ReplicaImp::addRequestToPrePrepareMessage(ClientRequestMsg *&n
       prePrepareMsg.addRequest(nextRequest->body(), nextRequest->size());
       clientsManager->addPendingRequest(
           nextRequest->clientProxyId(), nextRequest->requestSeqNum(), nextRequest->getCid());
+      hanan_primary_batching_duration_.finishMeasurement(true, nextRequest->getCid());
     }
   } else if (nextRequest->size() > maxStorageForRequests) {  // The message is too big
     LOG_WARN(GL,
@@ -886,11 +888,11 @@ void ReplicaImp::startConsensusProcess(PrePrepareMsg *pp, bool isCreatedEarlier)
 
   // guaranteed to be in primary
   // hanan
-  LOG_INFO(GL, "Hanan 0");
+  // LOG_INFO(GL, "Hanan 0");
   hanan_consensus_duration_.addStartTimeStamp(true, to_string(primaryLastUsedSeqNum));
-  if (consensus_start_time_stamps_.count(to_string(primaryLastUsedSeqNum)) == 0) {
-    consensus_start_time_stamps_[to_string(primaryLastUsedSeqNum)] = getMonotonicTime();
-  }
+  // if (consensus_start_time_stamps_.count(to_string(primaryLastUsedSeqNum)) == 0) {
+  //   consensus_start_time_stamps_[to_string(primaryLastUsedSeqNum)] = getMonotonicTime();
+  // }
 
   if (isCreatedEarlier) {
     controller->onSendingPrePrepare(primaryLastUsedSeqNum, firstPath);
@@ -1505,26 +1507,26 @@ void ReplicaImp::onMessage<FullCommitProofMsg>(FullCommitProofMsg *msg) {
   }
 
   // hanan
-  LOG_INFO(GL, "Hanan 1");
+  // LOG_INFO(GL, "Hanan 1");
   hanan_consensus_duration_.finishMeasurement(isCurrentPrimary(), to_string(msgSeqNum));
-  if (isCurrentPrimary()) {
-    if (consensus_start_time_stamps_.count(to_string(msgSeqNum)) != 0) {
-      auto consensusDuration = std::chrono::duration_cast<std::chrono::milliseconds>(
-                                   getMonotonicTime() - consensus_start_time_stamps_[to_string(msgSeqNum)])
-                                   .count();
+  // if (isCurrentPrimary()) {
+  //  if (consensus_start_time_stamps_.count(to_string(msgSeqNum)) != 0) {
+  //    auto consensusDuration = std::chrono::duration_cast<std::chrono::milliseconds>(
+  //                                 getMonotonicTime() - consensus_start_time_stamps_[to_string(msgSeqNum)])
+  //                                 .count();
 
-      consensus_duration_.add(static_cast<double>(consensusDuration));
+  //    consensus_duration_.add(static_cast<double>(consensusDuration));
 
-      metric_consensus_duration_avg_.Get().Set((uint64_t)consensus_duration_.avg());
-      metric_consensus_duration_variance_.Get().Set((uint64_t)consensus_duration_.var());
-      consensus_start_time_stamps_.erase(to_string(msgSeqNum));
-    }
+  //    metric_consensus_duration_avg_.Get().Set((uint64_t)consensus_duration_.avg());
+  //    metric_consensus_duration_variance_.Get().Set((uint64_t)consensus_duration_.var());
+  //    consensus_start_time_stamps_.erase(to_string(msgSeqNum));
+  //  }
 
-    if (consensus_start_time_stamps_.size() > 1000) {
-      consensus_start_time_stamps_.clear();
-      consensus_duration_.reset();
-    }
-  }
+  //  if (consensus_start_time_stamps_.size() > 1000) {
+  //    consensus_start_time_stamps_.clear();
+  //    consensus_duration_.reset();
+  //  }
+  //}
 
   delete msg;
   return;
@@ -4377,6 +4379,8 @@ ReplicaImp::ReplicaImp(bool firstTime,
       metric_post_exe_duration_avg_{metrics_.RegisterGauge("postExeDurationAvg", 0)},
       metric_post_exe_duration_variance_{metrics_.RegisterGauge("postExeDurationVariance", 0)},
       hanan_consensus_duration_{metrics_, "hanan_consensus_duration__", 1000},
+      hanan_post_exe_duration_{metrics_, "hanan_post_exe_duration__", 1000},
+      hanan_primary_batching_duration_{metrics_, "hanan_primary_batching_duration__", 10000},
       consensus_times_(histograms_.consensus),
       checkpoint_times_(histograms_.checkpointFromCreationToStable),
       time_in_active_view_(histograms_.timeInActiveView),
@@ -5158,24 +5162,26 @@ void ReplicaImp::finishExecutePrePrepareMsg(PrePrepareMsg *ppMsg,
   // hanan
 
   // hanan
-  if (isCurrentPrimary()) {
-    if (post_exe_start_time_stamps_.count(to_string(ppMsg->seqNumber())) != 0) {
-      auto consensusDuration = std::chrono::duration_cast<std::chrono::milliseconds>(
-                                   getMonotonicTime() - post_exe_start_time_stamps_[to_string(ppMsg->seqNumber())])
-                                   .count();
+  hanan_post_exe_duration_.finishMeasurement(isCurrentPrimary(), to_string(ppMsg->seqNumber()));
 
-      post_exe_duration_.add(static_cast<double>(consensusDuration));
+  // if (isCurrentPrimary()) {
+  //  if (post_exe_start_time_stamps_.count(to_string(ppMsg->seqNumber())) != 0) {
+  //    auto consensusDuration = std::chrono::duration_cast<std::chrono::milliseconds>(
+  //                                 getMonotonicTime() - post_exe_start_time_stamps_[to_string(ppMsg->seqNumber())])
+  //                                 .count();
 
-      metric_post_exe_duration_avg_.Get().Set((uint64_t)post_exe_duration_.avg());
-      metric_post_exe_duration_variance_.Get().Set((uint64_t)post_exe_duration_.var());
-      post_exe_start_time_stamps_.erase(to_string(ppMsg->seqNumber()));
-    }
+  //    post_exe_duration_.add(static_cast<double>(consensusDuration));
 
-    if (post_exe_start_time_stamps_.size() > 1000) {
-      post_exe_start_time_stamps_.clear();
-      post_exe_duration_.reset();
-    }
-  }
+  //    metric_post_exe_duration_avg_.Get().Set((uint64_t)post_exe_duration_.avg());
+  //    metric_post_exe_duration_variance_.Get().Set((uint64_t)post_exe_duration_.var());
+  //    post_exe_start_time_stamps_.erase(to_string(ppMsg->seqNumber()));
+  //  }
+
+  //  if (post_exe_start_time_stamps_.size() > 1000) {
+  //    post_exe_start_time_stamps_.clear();
+  //    post_exe_duration_.reset();
+  //  }
+  // }
 
   tryToStartOrFinishExecution(false);
 }
