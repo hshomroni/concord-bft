@@ -13,7 +13,8 @@ set(util_source_files
     src/throughput.cpp
     src/crypto_utils.cpp
     src/RawMemoryPool.cpp
-    src/config_file_parser.cpp)
+    src/config_file_parser.cpp
+    src/PerfMetrics.cpp)
 
 
 add_library(util        STATIC ${util_source_files})
