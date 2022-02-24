@@ -14,6 +14,8 @@
 #include <unordered_map>
 #include <string>
 #include <chrono>
+#include <variant>
+#include <mutex>
 
 #include "RollingAvgAndVar.hpp"
 #include "Metrics.hpp"
@@ -23,11 +25,12 @@
 
 using namespace std;
 using concordMetrics::GaugeHandle;
+using concordMetrics::AtomicGaugeHandle;
 using concordMetrics::Component;
 
 class PerfMetric {
  public:
-  PerfMetric(Component& component, string name, uint64_t num_map_entries_for_reset);
+  PerfMetric(Component& component, string name, uint64_t num_map_entries_for_reset, bool isThreadSafe);
 
   void addStartTimeStamp(bool isPrimary, string key);
 
@@ -35,8 +38,19 @@ class PerfMetric {
 
   void reset();
 
+  // void printMe() {
+  //  LOG_FATAL(KEY_EX_LOG,
+  //           "Hanan Perf Metric " << name_ << " info: num entries=" << entries_.size() << ", avg=" <<
+  //           avg_.Get().Get());
+  // }
+
  private:
+  void addStartTimeStampUnSafe(string key);
+  void finishMeasurementUnSafe(string key);
+
+  mutex mutex_;
   uint64_t num_map_entries_for_reset_;
+  bool is_thread_safe_;
   string name_;
   bftEngine::impl::RollingAvgAndVar avg_and_variance_;
   unordered_map<string, chrono::time_point<std::chrono::steady_clock>> entries_;
