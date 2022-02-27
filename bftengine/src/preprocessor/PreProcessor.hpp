@@ -354,15 +354,9 @@ class PreProcessor {
     concordMetrics::AtomicGaugeHandle preProcessingTimeAvg;
     concordMetrics::AtomicGaugeHandle launchAsyncPreProcessJobTimeAvg;
     concordMetrics::AtomicGaugeHandle preProcInFlyRequestsNum;
-    concordMetrics::AtomicGaugeHandle preExeDurationAvg;
-    concordMetrics::AtomicGaugeHandle preExeDurationVariance;
   } preProcessorMetrics_;
 
-  // performance metrics hanan
-  PerfMetric pre_exe_hanan;
-  RollingAvgAndVar pre_exe_duration_;
-  std::unordered_map<std::string, std::chrono::time_point<std::chrono::steady_clock>> pre_exe_time_start_stamps_;
-  // end hanan
+  PerfMetric<std::string> metric_pre_exe_duration_;
 
   bftEngine::impl::RollingAvgAndVar totalPreProcessingTime_;
   bftEngine::impl::RollingAvgAndVar launchAsyncJobTimeAvg_;
