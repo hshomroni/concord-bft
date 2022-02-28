@@ -31,6 +31,7 @@
 #include "PerformanceManager.hpp"
 #include <RollingAvgAndVar.hpp>
 #include "GlobalData.hpp"
+#include "PerfMetrics.hpp"
 
 // TODO[TK] till boost upgrade
 #pragma GCC diagnostic push
@@ -330,6 +331,9 @@ class PreProcessor {
     concordMetrics::AtomicGaugeHandle launchAsyncPreProcessJobTimeAvg;
     concordMetrics::AtomicGaugeHandle preProcInFlyRequestsNum;
   } preProcessorMetrics_;
+
+  PerfMetric<std::string> metric_pre_exe_duration_;
+
   bftEngine::impl::RollingAvgAndVar totalPreProcessingTime_;
   bftEngine::impl::RollingAvgAndVar launchAsyncJobTimeAvg_;
   concordUtil::Timers::Handle requestsStatusCheckTimer_;
