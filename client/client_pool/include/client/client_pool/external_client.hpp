@@ -77,6 +77,10 @@ class ConcordClient {
 
   std::chrono::steady_clock::time_point getStartRequestTime() const;
 
+  std::chrono::steady_clock::time_point getAndDeleteCidBeforeSendTime(const std::string& cid);
+
+  std::chrono::steady_clock::time_point getAndDeleteCidResponseTime(const std::string& cid);
+
   void setStartWaitingTime();
 
   std::chrono::steady_clock::time_point getWaitingTime() const;
@@ -142,6 +146,8 @@ class ConcordClient {
   size_t batching_buffer_reply_offset_ = 0UL;
   static bool delayed_behaviour_;
   bftEngine::OperationResult clientRequestError_;
+  std::unordered_map<std::string, std::chrono::steady_clock::time_point> cid_before_send_map_;
+  std::unordered_map<std::string, std::chrono::steady_clock::time_point> cid_response_map_;
 };
 
 }  // namespace external_client
