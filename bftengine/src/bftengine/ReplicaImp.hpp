@@ -304,6 +304,8 @@ class ReplicaImp : public InternalReplicaApi, public ReplicaForStateTransfer {
   CounterHandle metric_received_restart_ready_;
   CounterHandle metric_received_restart_proof_;
   PerfMetric<uint64_t> metric_consensus_duration_;
+  PerfMetric<uint64_t> metric_post_exe_duration_;
+  PerfMetric<std::string> metric_primary_batching_duration_;
   //*****************************************************
   RollingAvgAndVar consensus_time_;
   RollingAvgAndVar accumulating_batch_time_;
