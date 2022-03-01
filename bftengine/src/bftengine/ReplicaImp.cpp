@@ -884,6 +884,10 @@ void ReplicaImp::startConsensusProcess(PrePrepareMsg *pp, bool isCreatedEarlier)
   }
   metric_bft_batch_size_.Get().Set(pp->numberOfRequests());
   primaryLastUsedSeqNum++;
+
+  // guaranteed to be in primary
+  metric_consensus_duration_.addStartTimeStamp(primaryLastUsedSeqNum);
+
   if (isCreatedEarlier) {
     controller->onSendingPrePrepare(primaryLastUsedSeqNum, firstPath);
     pp->setSeqNumber(primaryLastUsedSeqNum);
@@ -2349,6 +2353,10 @@ void ReplicaImp::onMessage<AskForCheckpointMsg>(AskForCheckpointMsg *msg) {
 void ReplicaImp::startExecution(SeqNum seqNumber,
                                 concordUtils::SpanWrapper &span,
                                 bool askForMissingInfoAboutCommittedItems) {
+  if (isCurrentPrimary()) {
+    metric_consensus_duration_.finishMeasurement(seqNumber);
+  }
+
   consensus_times_.end(seqNumber);
   tryToRemovePendingRequestsForSeqNum(seqNumber);  // TODO(LG) Should verify if needed
   LOG_INFO(CNSUS, "Starting execution of seqNumber:" << seqNumber);
@@ -4230,6 +4238,7 @@ ReplicaImp::ReplicaImp(bool firstTime,
       metric_total_preexec_requests_executed_{metrics_.RegisterCounter("totalPreExecRequestsExecuted")},
       metric_received_restart_ready_{metrics_.RegisterCounter("receivedRestartReadyMsg", 0)},
       metric_received_restart_proof_{metrics_.RegisterCounter("receivedRestartProofMsg", 0)},
+      metric_consensus_duration_{metrics_, "consensusDuration", 1000, false},
       consensus_times_(histograms_.consensus),
       checkpoint_times_(histograms_.checkpointFromCreationToStable),
       time_in_active_view_(histograms_.timeInActiveView),
