@@ -460,7 +460,7 @@ void SingleRequestProcessingJob::execute() {
 void ConcordClientPool::InsertClientToQueue(
     ClientPtr &client, std::pair<int8_t, external_client::ConcordClient::PendingReplies> &&replies) {
   const auto client_id = client->getClientId();
-  LOG_INFO(logger_, "Client has completed processing request" << KVLOG(client_id));
+  LOG_DEBUG(logger_, "Client has completed processing request" << KVLOG(client_id));
   std::chrono::steady_clock::time_point end = std::chrono::steady_clock::now();
   auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(end - client->getStartRequestTime()).count();
   ClientPoolMetrics_.last_request_time_gauge.Get().Set(duration);
@@ -540,7 +540,7 @@ void ConcordClientPool::InsertClientToQueue(
                           req.span_context,
                           nullptr);
       } else {
-        LOG_INFO(logger_, "Lior updating metrics " << KVLOG(client_id));
+
         auto finish = std::chrono::steady_clock::now();
         for (const auto &reply : replies.second) {
           auto before_send = client->getAndDeleteCidBeforeSendTime(reply.cid);
@@ -557,7 +557,7 @@ void ConcordClientPool::InsertClientToQueue(
         if (average_cid_close_dur_.numOfElements() >= 1000) average_cid_close_dur_.reset();
         ClientPoolMetrics_.average_cid_rcv_dur_gauge.Get().Set((uint64_t)average_cid_receive_dur_.avg());
         if (average_cid_receive_dur_.numOfElements() >= 1000) average_cid_receive_dur_.reset();
-        LOG_INFO(logger_, "Lior finishing to update metrics " << KVLOG(client_id));
+
         clients_.push_back(client);
       }
     }
