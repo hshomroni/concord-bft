@@ -482,7 +482,7 @@ void ReplicaImp::onMessage<ClientRequestMsg>(ClientRequestMsg *m) {
       if (clientsManager->canBecomePending(clientId, reqSeqNum)) {
         LOG_DEBUG(CNSUS, "Pushing to primary queue, request " << KVLOG(reqSeqNum, clientId, senderId));
         if (time_to_collect_batch_ == MinTime) time_to_collect_batch_ = getMonotonicTime();
-        metric_primary_batching_duration_.addStartTimeStamp(m->getCid());
+        metric_primary_batching_duration_.startMeasurement(m->getCid());
         requestsQueueOfPrimary.push(m);
         primaryCombinedReqSize += m->size();
         primary_queue_size_.Get().Set(requestsQueueOfPrimary.size());
@@ -885,7 +885,7 @@ void ReplicaImp::startConsensusProcess(PrePrepareMsg *pp, bool isCreatedEarlier)
   primaryLastUsedSeqNum++;
 
   // guaranteed to be in primary
-  metric_consensus_duration_.addStartTimeStamp(primaryLastUsedSeqNum);
+  metric_consensus_duration_.startMeasurement(primaryLastUsedSeqNum);
 
   if (isCreatedEarlier) {
     controller->onSendingPrePrepare(primaryLastUsedSeqNum, firstPath);
@@ -2450,7 +2450,7 @@ void ReplicaImp::startExecution(SeqNum seqNumber,
                                 bool askForMissingInfoAboutCommittedItems) {
   if (isCurrentPrimary()) {
     metric_consensus_duration_.finishMeasurement(seqNumber);
-    metric_post_exe_duration_.addStartTimeStamp(seqNumber);
+    metric_post_exe_duration_.startMeasurement(seqNumber);
   }
 
   consensus_times_.end(seqNumber);
