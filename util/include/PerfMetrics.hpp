@@ -38,12 +38,12 @@ class PerfMetric {
         avg_{component.RegisterGauge(name + "Avg", 0)},
         variance_{component.RegisterGauge(name + "Variance", 0)} {}
 
-  void addStartTimeStamp(const T& key) {
+  void startMeasurement(const T& key) {
     if (is_thread_safe_) {
       lock_guard<mutex> lock(mutex_);
-      addStartTimeStampUnSafe(key);
+      startMeasurementUnsafe(key);
     } else {
-      addStartTimeStampUnSafe(key);
+      startMeasurementUnsafe(key);
     }
   }
 
@@ -74,21 +74,41 @@ class PerfMetric {
     }
   }
 
+ protected:
+  enum MeasurementState { RUNNING_MEASURE, PAUSED_MEASURE };
+
+  struct EntryVal {
+    chrono::time_point<std::chrono::steady_clock> lastTimeStamp;
+    uint64_t accumulatedTimeMs;
+    MeasurementState state;
+
+    EntryVal(chrono::time_point<std::chrono::steady_clock> creationTimeStamp)
+        : lastTimeStamp{creationTimeStamp}, accumulatedTimeMs{0}, state{RUNNING_MEASURE} {}
+
+    ~EntryVal() = default;
+  };
+
  private:
-  void addStartTimeStampUnSafe(const T& key) {
-    if (entries_.count(key) == 0) {
-      entries_[key] = getMonotonicTime();
+  void startMeasurementUnsafe(const T& key) {
+    auto entry = entries_.find(key);
+    if (entry == entries_.end()) {
+      entry->second = EntryVal{getMonotonicTime()};
     }
   }
+
   void finishMeasurementUnSafe(const T& key) {
-    if (entries_.count(key) != 0) {
-      auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(getMonotonicTime() - entries_[key]).count();
+    auto entry = entries_.find(key);
+    if (entry != entries_.end()) {
+      auto duration =
+          std::chrono::duration_cast<std::chrono::milliseconds>(getMonotonicTime() - entry->second.lastTimeStamp)
+              .count();
+      duration += entry->second.accumulatedTimeMs;
 
       avg_and_variance_.add(static_cast<double>(duration));
 
       avg_.Get().Set(static_cast<uint64_t>(avg_and_variance_.avg()));
       variance_.Get().Set(static_cast<uint64_t>(avg_and_variance_.var()));
-      entries_.erase(key);
+      entries_.erase(entry);
     }
 
     if (entries_.size() > num_map_entries_for_reset_) {
@@ -96,8 +116,9 @@ class PerfMetric {
     }
   }
   void deleteSingleEntryUnSafe(const T& key) {
-    if (entries_.count(key) != 0) {
-      entries_.erase(key);
+    auto entry = entries_.find(key);
+    if (entry != entries_.end()) {
+      entries_.erase(entry);
     }
   }
 
@@ -106,7 +127,7 @@ class PerfMetric {
   bool is_thread_safe_;
   string name_;
   bftEngine::impl::RollingAvgAndVar avg_and_variance_;
-  unordered_map<T, chrono::time_point<std::chrono::steady_clock>> entries_;
+  unordered_map<T, EntryVal> entries_;
   GaugeHandle avg_;
   GaugeHandle variance_;
 };

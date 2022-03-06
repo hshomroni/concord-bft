@@ -1482,7 +1482,7 @@ bool PreProcessor::registerRequestOnPrimaryReplica(const string &batchCid,
   const std::string reqCid = clientReqMsg->getCid();
 
   if (myReplica_.isCurrentPrimary()) {
-    metric_pre_exe_duration_.addStartTimeStamp(reqCid);
+    metric_pre_exe_duration_.startMeasurement(reqCid);
   }
 
   (reqEntry->reqRetryId)++;
