@@ -1491,7 +1491,6 @@ bool PreProcessor::registerRequestOnPrimaryReplica(const string &batchCid,
   (reqEntry->reqRetryId)++;
   countRetriedRequests(clientReqMsg, reqEntry);
   const auto reqSeqNum = clientReqMsg->requestSeqNum();
-  const auto reqCid = clientReqMsg->getCid();
   const auto clientId = clientReqMsg->clientProxyId();
   const auto senderId = clientReqMsg->senderId();
   const auto requestTimeoutMilli = clientReqMsg->requestTimeoutMilli();
