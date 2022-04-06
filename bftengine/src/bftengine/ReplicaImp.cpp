@@ -669,7 +669,7 @@ bool ReplicaImp::tryToSendPrePrepareMsg(bool batchingLogic) {
       time_to_collect_batch_ = MinTime;
     }
   } else {
-    auto builtReq = buildPrePrepareMessage();
+    auto builtReq = buildPrePrepareMessageByRequestsNum(config_.maxNumOfRequestsInBatch);  // hanan
     isSent = builtReq.second;
     if (isSent) {
       pp = builtReq.first;
@@ -843,7 +843,7 @@ std::pair<PrePrepareMsg *, bool> ReplicaImp::buildPrePrepareMessageByRequestsNum
   }
 
   uint32_t maxSpaceForReqs = prePrepareMsg->remainingSizeForRequests();
-  ClientRequestMsg *nextRequest = requestsQueueOfPrimary.front();
+  ClientRequestMsg *nextRequest = !requestsQueueOfPrimary.empty() ? requestsQueueOfPrimary.front() : nullptr;  // hanan
   while (nextRequest != nullptr && prePrepareMsg->numberOfRequests() < requiredRequestsNum)
     nextRequest = addRequestToPrePrepareMessage(nextRequest, *prePrepareMsg, maxSpaceForReqs);
 
@@ -4343,6 +4343,13 @@ ReplicaImp::ReplicaImp(bool firstTime,
       metric_total_preexec_requests_executed_{metrics_.RegisterCounter("totalPreExecRequestsExecuted")},
       metric_received_restart_ready_{metrics_.RegisterCounter("receivedRestartReadyMsg", 0)},
       metric_received_restart_proof_{metrics_.RegisterCounter("receivedRestartProofMsg", 0)},
+      metric_consensus_duration_{metrics_, "consensusDuration", 1000, 100, true},
+      metric_post_exe_duration_{metrics_, "postExeDuration", 1000, 100, true},
+      metric_core_exe_func_duration_{
+          std::make_shared<PerfMetric<uint64_t>>(metrics_, "postExeCoreFuncDuration", 1000, 100, true)},
+      metric_consensus_end_to_core_exe_duration_{
+          std::make_shared<PerfMetric<uint64_t>>(metrics_, "consensusEndToExeStartDuration", 1000, 100, true)},
+      metric_primary_batching_duration_{metrics_, "primaryBatchingDuration", 10000, 1000, true},
       consensus_times_(histograms_.consensus),
       checkpoint_times_(histograms_.checkpointFromCreationToStable),
       time_in_active_view_(histograms_.timeInActiveView),
