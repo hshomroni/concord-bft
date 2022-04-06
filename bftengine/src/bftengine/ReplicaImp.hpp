@@ -43,6 +43,8 @@
 #include "FakeClock.hpp"
 #include <ccron/ticks_generator.hpp>
 #include "EpochManager.hpp"
+#include "PerfMetrics.hpp"
+
 
 namespace preprocessor {
 class PreProcessResultMsg;
@@ -304,8 +306,8 @@ class ReplicaImp : public InternalReplicaApi, public ReplicaForStateTransfer {
   CounterHandle metric_received_restart_proof_;
   PerfMetric<uint64_t> metric_consensus_duration_;
   PerfMetric<uint64_t> metric_post_exe_duration_;
-  std::shared_ptr<PerfMetric<uint64_t>> metric_core_exe_func_duration_;
-  std::shared_ptr<PerfMetric<uint64_t>> metric_consensus_end_to_core_exe_duration_;
+  PerfMetric<uint64_t> metric_core_exe_func_duration_;
+  PerfMetric<uint64_t> metric_consensus_end_to_core_exe_duration_;
   PerfMetric<std::string> metric_primary_batching_duration_;
   //*****************************************************
   RollingAvgAndVar consensus_time_;

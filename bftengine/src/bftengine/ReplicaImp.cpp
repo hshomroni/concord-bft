@@ -483,6 +483,7 @@ void ReplicaImp::onMessage<ClientRequestMsg>(ClientRequestMsg *m) {
       if (clientsManager->canBecomePending(clientId, reqSeqNum)) {
         LOG_DEBUG(CNSUS, "Pushing to primary queue, request " << KVLOG(reqSeqNum, clientId, senderId));
         if (time_to_collect_batch_ == MinTime) time_to_collect_batch_ = getMonotonicTime();
+        metric_primary_batching_duration_.addStartTimeStamp(m->getCid());
         requestsQueueOfPrimary.push(m);
         primaryCombinedReqSize += m->size();
         primary_queue_size_.Get().Set(requestsQueueOfPrimary.size());
@@ -724,6 +725,7 @@ ClientRequestMsg *ReplicaImp::addRequestToPrePrepareMessage(ClientRequestMsg *&n
       prePrepareMsg.addRequest(nextRequest->body(), nextRequest->size());
       clientsManager->addPendingRequest(
           nextRequest->clientProxyId(), nextRequest->requestSeqNum(), nextRequest->getCid());
+      metric_primary_batching_duration_.finishMeasurement(nextRequest->getCid());
     }
   } else if (nextRequest->size() > maxStorageForRequests) {  // The message is too big
     LOG_WARN(GL,
@@ -874,6 +876,10 @@ void ReplicaImp::startConsensusProcess(PrePrepareMsg *pp, bool isCreatedEarlier)
   }
   metric_bft_batch_size_.Get().Set(pp->numberOfRequests());
   primaryLastUsedSeqNum++;
+
+  // guaranteed to be in primary
+  metric_consensus_duration_.addStartTimeStamp(primaryLastUsedSeqNum);
+
   if (isCreatedEarlier) {
     controller->onSendingPrePrepare(primaryLastUsedSeqNum, firstPath);
     pp->setSeqNumber(primaryLastUsedSeqNum);
@@ -2445,6 +2451,13 @@ void ReplicaImp::onMessage<AskForCheckpointMsg>(AskForCheckpointMsg *msg) {
 void ReplicaImp::startExecution(SeqNum seqNumber,
                                 concordUtils::SpanWrapper &span,
                                 bool askForMissingInfoAboutCommittedItems) {
+
+    if (isCurrentPrimary()) {
+      metric_consensus_duration_.finishMeasurement(seqNumber);
+      metric_post_exe_duration_.addStartTimeStamp(seqNumber);
+      metric_consensus_end_to_core_exe_duration_.addStartTimeStamp(seqNumber);
+    }
+
   consensus_times_.end(seqNumber);
   tryToRemovePendingRequestsForSeqNum(seqNumber);  // TODO(LG) Should verify if needed
   LOG_INFO(CNSUS, "Starting execution of seqNumber:" << seqNumber);
@@ -4337,10 +4350,8 @@ ReplicaImp::ReplicaImp(bool firstTime,
       metric_received_restart_proof_{metrics_.RegisterCounter("receivedRestartProofMsg", 0)},
       metric_consensus_duration_{metrics_, "consensusDuration", 1000, 100, true},
       metric_post_exe_duration_{metrics_, "postExeDuration", 1000, 100, true},
-      metric_core_exe_func_duration_{
-          std::make_shared<PerfMetric<uint64_t>>(metrics_, "postExeCoreFuncDuration", 1000, 100, true)},
-      metric_consensus_end_to_core_exe_duration_{
-          std::make_shared<PerfMetric<uint64_t>>(metrics_, "consensusEndToExeStartDuration", 1000, 100, true)},
+      metric_core_exe_func_duration_{metrics_, "postExeCoreFuncDuration", 1000, 100, true},
+      metric_consensus_end_to_core_exe_duration_{metrics_, "consensusEndToExeStartDuration", 1000, 100, true},
       metric_primary_batching_duration_{metrics_, "primaryBatchingDuration", 10000, 1000, true},
       consensus_times_(histograms_.consensus),
       checkpoint_times_(histograms_.checkpointFromCreationToStable),
@@ -5060,7 +5071,14 @@ void ReplicaImp::executeRequests(PrePrepareMsg *ppMsg, Bitmap &requestSet, Times
       span.setTag("rid", config_.getreplicaId());
       span.setTag("cid", ppMsg->getCid());
       span.setTag("seq_num", ppMsg->seqNumber());
+      if(isCurrentPrimary()){
+        metric_consensus_end_to_core_exe_duration_.finishMeasurement(ppMsg->seqNumber());
+        metric_core_exe_func_duration_.addStartTimeStamp(ppMsg->seqNumber());
+      }
       bftRequestsHandler_->execute(*pAccumulatedRequests, time, ppMsg->getCid(), span);
+      if(isCurrentPrimary()){
+        metric_core_exe_func_duration_.finishMeasurement(ppMsg->seqNumber());
+      }
     }
   } else {
     LOG_INFO(
@@ -5126,6 +5144,9 @@ void ReplicaImp::finishExecutePrePrepareMsg(PrePrepareMsg *ppMsg,
 
   updateLimitsAndMetrics(ppMsg);
 
+  if (isCurrentPrimary()){
+    metric_post_exe_duration_.finishMeasurement(ppMsg->seqNumber());
+  }
   tryToStartOrFinishExecution(false);
 }
 

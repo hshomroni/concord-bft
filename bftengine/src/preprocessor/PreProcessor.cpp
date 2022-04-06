@@ -1303,6 +1303,9 @@ void PreProcessor::finalizePreProcessing(NodeIdType clientId, uint16_t reqOffset
       incomingMsgsStorage_->pushExternalMsg(move(preProcessMsg));
 
       releaseClientPreProcessRequest(reqEntry, COMPLETE);
+      if (myReplica_.isCurrentPrimary()) {
+        metric_pre_exe_duration_.finishMeasurement(reqCid);
+      }
       LOG_INFO(logger(),
                "Pre-processing completed for" << KVLOG(batchCid, reqSeqNum, reqCid, clientId, reqOffsetInBatch));
     }
@@ -1479,6 +1482,12 @@ bool PreProcessor::registerRequestOnPrimaryReplica(const string &batchCid,
                                                    PreProcessRequestMsgSharedPtr &preProcessRequestMsg,
                                                    uint16_t reqOffsetInBatch,
                                                    RequestStateSharedPtr reqEntry) {
+  // save in local var cause we might use it (for metrics) after clientReqMsg obj is moved
+  const std::string reqCid = clientReqMsg->getCid();
+  if (myReplica_.isCurrentPrimary()) {
+    metric_pre_exe_duration_.addStartTimeStamp(reqCid);
+  }
+
   (reqEntry->reqRetryId)++;
   countRetriedRequests(clientReqMsg, reqEntry);
   const auto reqSeqNum = clientReqMsg->requestSeqNum();
@@ -1508,10 +1517,14 @@ bool PreProcessor::registerRequestOnPrimaryReplica(const string &batchCid,
                                         clientReqMsg->result());
   const auto registerSucceeded =
       registerRequest(batchCid, batchSize, move(clientReqMsg), preProcessRequestMsg, reqOffsetInBatch);
-  if (registerSucceeded)
+  if (registerSucceeded) {
     LOG_INFO(logger(),
              "Start request processing by a primary replica"
                  << KVLOG(batchCid, reqSeqNum, reqCid, batchSize, clientId, senderId, requestTimeoutMilli, blockId));
+  } else {
+    // delete this cid from time stamp map cause registration failed
+    metric_pre_exe_duration_.deleteSingleEntry(reqCid);
+  }
   return registerSucceeded;
 }
 
