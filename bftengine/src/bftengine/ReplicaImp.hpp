@@ -45,7 +45,6 @@
 #include "EpochManager.hpp"
 #include "PerfMetrics.hpp"
 
-
 namespace preprocessor {
 class PreProcessResultMsg;
 }

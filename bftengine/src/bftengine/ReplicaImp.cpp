@@ -2451,12 +2451,11 @@ void ReplicaImp::onMessage<AskForCheckpointMsg>(AskForCheckpointMsg *msg) {
 void ReplicaImp::startExecution(SeqNum seqNumber,
                                 concordUtils::SpanWrapper &span,
                                 bool askForMissingInfoAboutCommittedItems) {
-
-    if (isCurrentPrimary()) {
-      metric_consensus_duration_.finishMeasurement(seqNumber);
-      metric_post_exe_duration_.addStartTimeStamp(seqNumber);
-      metric_consensus_end_to_core_exe_duration_.addStartTimeStamp(seqNumber);
-    }
+  if (isCurrentPrimary()) {
+    metric_consensus_duration_.finishMeasurement(seqNumber);
+    metric_post_exe_duration_.addStartTimeStamp(seqNumber);
+    metric_consensus_end_to_core_exe_duration_.addStartTimeStamp(seqNumber);
+  }
 
   consensus_times_.end(seqNumber);
   tryToRemovePendingRequestsForSeqNum(seqNumber);  // TODO(LG) Should verify if needed
@@ -5071,12 +5070,12 @@ void ReplicaImp::executeRequests(PrePrepareMsg *ppMsg, Bitmap &requestSet, Times
       span.setTag("rid", config_.getreplicaId());
       span.setTag("cid", ppMsg->getCid());
       span.setTag("seq_num", ppMsg->seqNumber());
-      if(isCurrentPrimary()){
+      if (isCurrentPrimary()) {
         metric_consensus_end_to_core_exe_duration_.finishMeasurement(ppMsg->seqNumber());
         metric_core_exe_func_duration_.addStartTimeStamp(ppMsg->seqNumber());
       }
       bftRequestsHandler_->execute(*pAccumulatedRequests, time, ppMsg->getCid(), span);
-      if(isCurrentPrimary()){
+      if (isCurrentPrimary()) {
         metric_core_exe_func_duration_.finishMeasurement(ppMsg->seqNumber());
       }
     }
@@ -5144,7 +5143,7 @@ void ReplicaImp::finishExecutePrePrepareMsg(PrePrepareMsg *ppMsg,
 
   updateLimitsAndMetrics(ppMsg);
 
-  if (isCurrentPrimary()){
+  if (isCurrentPrimary()) {
     metric_post_exe_duration_.finishMeasurement(ppMsg->seqNumber());
   }
   tryToStartOrFinishExecution(false);
