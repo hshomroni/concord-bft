@@ -5083,6 +5083,7 @@ void ReplicaImp::executeRequests(PrePrepareMsg *ppMsg, Bitmap &requestSet, Times
               "Executing all the requests of preprepare message with cid: " << ppMsg->getCid() << " with accumulation");
     {
       //      TimeRecorder scoped_timer1(*histograms_.executeWriteRequest);
+      uint16_t num_reqs = ppMsg->numberOfRequests();
       std::chrono::time_point<std::chrono::steady_clock> exe_start_time_stamp;
 
       const concordUtils::SpanContext &span_context{""};
@@ -5099,15 +5100,17 @@ void ReplicaImp::executeRequests(PrePrepareMsg *ppMsg, Bitmap &requestSet, Times
       if (isCurrentPrimary()) {
         metric_core_exe_func_duration_.finishMeasurement(ppMsg->seqNumber());
 
-        double exe_duration_per_req_ms =
-            static_cast<double>(std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::steady_clock::now() -
-                                                                                      exe_start_time_stamp)
-                                    .count()) /
-            static_cast<double>(ppMsg->numberOfRequests());
+        if (num_reqs > 0) {
+          double exe_duration_per_req_ms =
+              static_cast<double>(std::chrono::duration_cast<std::chrono::milliseconds>(
+                                      std::chrono::steady_clock::now() - exe_start_time_stamp)
+                                      .count()) /
+              static_cast<double>(num_reqs);
 
-        LOG_INFO(
-            GL,
-            "Hanan Post exe of " << ppMsg->numberOfRequests() << " Reqs took" << exe_duration_per_req_ms << " per req");
+          LOG_INFO(GL,
+                   "Hanan Post exe of " << num_reqs << " Reqs took" << exe_duration_per_req_ms
+                                        << " per req");
+        }
       }
     }
   } else {
