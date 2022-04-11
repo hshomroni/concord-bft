@@ -637,6 +637,8 @@ std::pair<PrePrepareMsg *, bool> ReplicaImp::buildPrePrepareMsgBatchByRequestsNu
   ConcordAssertGT(requiredRequestsNum, 0);
   // DD: To make sure that time service does not affect sending messages
   uint32_t timeServiceBatchSizeAdjustment = config_.timeServiceEnabled ? 1 : 0;
+
+  requiredRequestsNum = (activeExecutions_ > 0) ? requiredRequestsNum : requiredRequestsNum / 2;
   if (requestsQueueOfPrimary.size() < requiredRequestsNum - timeServiceBatchSizeAdjustment) {
     LOG_DEBUG(GL,
               "Not enough messages in the primary replica queue to fill a batch"
@@ -670,7 +672,7 @@ bool ReplicaImp::tryToSendPrePrepareMsg(bool batchingLogic) {
       time_to_collect_batch_ = MinTime;
     }
   } else {
-    auto builtReq = buildPrePrepareMessageByRequestsNum(config_.maxNumOfRequestsInBatch);
+    auto builtReq = buildPrePrepareMessage();
     isSent = builtReq.second;
     if (isSent) {
       pp = builtReq.first;
@@ -817,16 +819,10 @@ std::pair<PrePrepareMsg *, bool> ReplicaImp::finishAddingRequestsToPrePrepareMsg
 // The preprepare message can be nullptr if the finalisation is happening in a separate thread.
 // So the second value of the pair provides the real indication of success of failure.
 std::pair<PrePrepareMsg *, bool> ReplicaImp::buildPrePrepareMessage() {
-  // sending 0 to buildPrePrepareMessageByRequestsNum means no limit on Requests
-  return buildPrePrepareMessageByRequestsNum(0);
-}
-
-// The preprepare message can be nullptr if the finalisation is happening in a separate thread.
-// So the second value of the pair provides the real indication of success of failure.
-std::pair<PrePrepareMsg *, bool> ReplicaImp::buildPrePrepareMessageByRequestsNum(uint32_t requiredRequestsNum) {
   TimeRecorder scoped_timer(*histograms_.buildPrePrepareMessage);
   PrePrepareMsg *prePrepareMsg = createPrePrepareMessage();
   if (!prePrepareMsg) return std::make_pair(nullptr, false);
+
   if (!getReplicaConfig().prePrepareFinalizeAsyncEnabled) {
     SCOPED_MDC("pp_msg_cid", prePrepareMsg->getCid());
   }
@@ -834,13 +830,27 @@ std::pair<PrePrepareMsg *, bool> ReplicaImp::buildPrePrepareMessageByRequestsNum
   uint32_t maxSpaceForReqs = prePrepareMsg->remainingSizeForRequests();
   {
     TimeRecorder scoped_timer1(*histograms_.addAllRequestsToPrePrepare);
-    ClientRequestMsg *nextRequest = !requestsQueueOfPrimary.empty() ? requestsQueueOfPrimary.front() : nullptr;
-
-    // when requiredRequestsNum is 0 it means no required req number so don't affect the req loop
-    bool required_req_num_cond = requiredRequestsNum ? (prePrepareMsg->numberOfRequests() < requiredRequestsNum) : true;
-    while (nextRequest != nullptr && required_req_num_cond)
+    ClientRequestMsg *nextRequest = (!requestsQueueOfPrimary.empty() ? requestsQueueOfPrimary.front() : nullptr);
+    while (nextRequest != nullptr)
       nextRequest = addRequestToPrePrepareMessage(nextRequest, *prePrepareMsg, maxSpaceForReqs);
   }
+  return finishAddingRequestsToPrePrepareMsg(prePrepareMsg, maxSpaceForReqs, 0, 0);
+}
+
+// The preprepare message can be nullptr if the finalisation is happening in a separate thread.
+// So the second value of the pair provides the real indication of success of failure.
+std::pair<PrePrepareMsg *, bool> ReplicaImp::buildPrePrepareMessageByRequestsNum(uint32_t requiredRequestsNum) {
+  PrePrepareMsg *prePrepareMsg = createPrePrepareMessage();
+  if (!prePrepareMsg) return std::make_pair(nullptr, false);
+  if (!getReplicaConfig().prePrepareFinalizeAsyncEnabled) {
+    SCOPED_MDC("pp_msg_cid", prePrepareMsg->getCid());
+  }
+
+  uint32_t maxSpaceForReqs = prePrepareMsg->remainingSizeForRequests();
+  ClientRequestMsg *nextRequest = (!requestsQueueOfPrimary.empty() ? requestsQueueOfPrimary.front() : nullptr);
+  while (nextRequest != nullptr && prePrepareMsg->numberOfRequests() < (requiredRequestsNum + 500))
+    nextRequest = addRequestToPrePrepareMessage(nextRequest, *prePrepareMsg, maxSpaceForReqs);
+
   return finishAddingRequestsToPrePrepareMsg(prePrepareMsg, maxSpaceForReqs, 0, requiredRequestsNum);
 }
 
@@ -854,7 +864,7 @@ std::pair<PrePrepareMsg *, bool> ReplicaImp::buildPrePrepareMessageByBatchSize(u
   }
 
   uint32_t maxSpaceForReqs = prePrepareMsg->remainingSizeForRequests();
-  ClientRequestMsg *nextRequest = requestsQueueOfPrimary.front();
+  ClientRequestMsg *nextRequest = (!requestsQueueOfPrimary.empty() ? requestsQueueOfPrimary.front() : nullptr);
   while (nextRequest != nullptr &&
          (maxSpaceForReqs - prePrepareMsg->remainingSizeForRequests() < requiredBatchSizeInBytes))
     nextRequest = addRequestToPrePrepareMessage(nextRequest, *prePrepareMsg, maxSpaceForReqs);
@@ -893,8 +903,9 @@ void ReplicaImp::startConsensusProcess(PrePrepareMsg *pp, bool isCreatedEarlier)
   SCOPED_MDC_PATH(CommitPathToMDCString(firstPath));
 
   LOG_INFO(CNSUS,
-           "Sending PrePrepare message" << KVLOG(pp->numberOfRequests())
-                                        << " correlation ids: " << pp->getBatchCorrelationIdAsString());
+           "Sending PrePrepare message"
+               << ", num remamining reqs in queue " << requestsQueueOfPrimary.size() << ", "
+               << KVLOG(pp->numberOfRequests()) << " correlation ids: " << pp->getBatchCorrelationIdAsString());
 
   consensus_times_.start(primaryLastUsedSeqNum);
 
@@ -4351,6 +4362,8 @@ ReplicaImp::ReplicaImp(bool firstTime,
       metric_post_exe_duration_{metrics_, "postExeDuration", 1000, 100, true},
       metric_core_exe_func_duration_{metrics_, "postExeCoreFuncDuration", 1000, 100, true},
       metric_consensus_end_to_core_exe_duration_{metrics_, "consensusEndToExeStartDuration", 1000, 100, true},
+      metric_post_exe_thread_idle_time_{metrics_, "PostExeThreadIdleDuration", 1000, 100, true},
+      metric_post_exe_thread_active_time_{metrics_, "PostExeThreadActiveDuration", 1000, 100, true},
       metric_primary_batching_duration_{metrics_, "primaryBatchingDuration", 10000, 1000, true},
       consensus_times_(histograms_.consensus),
       checkpoint_times_(histograms_.checkpointFromCreationToStable),
@@ -4841,6 +4854,9 @@ void ReplicaImp::startPrePrepareMsgExecution(PrePrepareMsg *ppMsg,
     // send internal message that will call to finishExecutePrePrepareMsg
     ConcordAssert(activeExecutions_ == 0);
     activeExecutions_ = 1;
+    metric_post_exe_thread_active_time_.addStartTimeStamp(0);
+    metric_post_exe_thread_idle_time_.finishMeasurement(0);
+
     InternalMessage im = FinishPrePrepareExecutionInternalMsg{ppMsg, nullptr};  // TODO(GG): check....
     getIncomingMsgsStorage().pushInternalMsg(std::move(im));
   }
@@ -4933,6 +4949,8 @@ void ReplicaImp::executeAllPrePreparedRequests(bool allowParallelExecution,
 
   ConcordAssert(activeExecutions_ == 0);
   activeExecutions_ = 1;
+  metric_post_exe_thread_active_time_.addStartTimeStamp(0);
+  metric_post_exe_thread_idle_time_.finishMeasurement(0);
   if (shouldRunRequestsInParallel) {
     PostExecJob *j = new PostExecJob(ppMsg, requestSet, time, *this);
     postExecThread_.add(j);
@@ -5065,6 +5083,8 @@ void ReplicaImp::executeRequests(PrePrepareMsg *ppMsg, Bitmap &requestSet, Times
               "Executing all the requests of preprepare message with cid: " << ppMsg->getCid() << " with accumulation");
     {
       //      TimeRecorder scoped_timer1(*histograms_.executeWriteRequest);
+      std::chrono::time_point<std::chrono::steady_clock> exe_start_time_stamp;
+
       const concordUtils::SpanContext &span_context{""};
       auto span = concordUtils::startChildSpanFromContext(span_context, "bft_client_request");
       span.setTag("rid", config_.getreplicaId());
@@ -5073,10 +5093,21 @@ void ReplicaImp::executeRequests(PrePrepareMsg *ppMsg, Bitmap &requestSet, Times
       if (isCurrentPrimary()) {
         metric_consensus_end_to_core_exe_duration_.finishMeasurement(ppMsg->seqNumber());
         metric_core_exe_func_duration_.addStartTimeStamp(ppMsg->seqNumber());
+        exe_start_time_stamp = std::chrono::steady_clock::now();
       }
       bftRequestsHandler_->execute(*pAccumulatedRequests, time, ppMsg->getCid(), span);
       if (isCurrentPrimary()) {
         metric_core_exe_func_duration_.finishMeasurement(ppMsg->seqNumber());
+
+        double exe_duration_per_req_ms =
+            static_cast<double>(std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::steady_clock::now() -
+                                                                                      exe_start_time_stamp)
+                                    .count()) /
+            static_cast<double>(ppMsg->numberOfRequests());
+
+        LOG_INFO(
+            GL,
+            "Hanan Post exe of " << ppMsg->numberOfRequests() << " Reqs took" << exe_duration_per_req_ms << " per req");
       }
     }
   } else {
@@ -5112,6 +5143,8 @@ void ReplicaImp::executeRequests(PrePrepareMsg *ppMsg, Bitmap &requestSet, Times
 void ReplicaImp::finishExecutePrePrepareMsg(PrePrepareMsg *ppMsg,
                                             IRequestsHandler::ExecutionRequestsQueue *pAccumulatedRequests) {
   activeExecutions_ = 0;
+  metric_post_exe_thread_idle_time_.addStartTimeStamp(0);
+  metric_post_exe_thread_active_time_.finishMeasurement(0);
 
   if (pAccumulatedRequests != nullptr) {
     sendResponses(ppMsg, *pAccumulatedRequests);
