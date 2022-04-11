@@ -5107,9 +5107,7 @@ void ReplicaImp::executeRequests(PrePrepareMsg *ppMsg, Bitmap &requestSet, Times
                                       .count()) /
               static_cast<double>(num_reqs);
 
-          LOG_INFO(GL,
-                   "Hanan Post exe of " << num_reqs << " Reqs took" << exe_duration_per_req_ms
-                                        << " per req");
+          LOG_INFO(GL, "Hanan Post exe of " << num_reqs << " Reqs took" << exe_duration_per_req_ms << " per req");
         }
       }
     }
