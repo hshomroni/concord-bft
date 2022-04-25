@@ -637,8 +637,6 @@ std::pair<PrePrepareMsg *, bool> ReplicaImp::buildPrePrepareMsgBatchByRequestsNu
   ConcordAssertGT(requiredRequestsNum, 0);
   // DD: To make sure that time service does not affect sending messages
   uint32_t timeServiceBatchSizeAdjustment = config_.timeServiceEnabled ? 1 : 0;
-
-  requiredRequestsNum = (activeExecutions_ > 0) ? requiredRequestsNum : requiredRequestsNum / 2;
   if (requestsQueueOfPrimary.size() < requiredRequestsNum - timeServiceBatchSizeAdjustment) {
     LOG_DEBUG(GL,
               "Not enough messages in the primary replica queue to fill a batch"
@@ -847,8 +845,8 @@ std::pair<PrePrepareMsg *, bool> ReplicaImp::buildPrePrepareMessageByRequestsNum
   }
 
   uint32_t maxSpaceForReqs = prePrepareMsg->remainingSizeForRequests();
-  ClientRequestMsg *nextRequest = (!requestsQueueOfPrimary.empty() ? requestsQueueOfPrimary.front() : nullptr);
-  while (nextRequest != nullptr && prePrepareMsg->numberOfRequests() < (requiredRequestsNum + 500))
+  ClientRequestMsg *nextRequest = requestsQueueOfPrimary.front();
+  while (nextRequest != nullptr && prePrepareMsg->numberOfRequests() < requiredRequestsNum)
     nextRequest = addRequestToPrePrepareMessage(nextRequest, *prePrepareMsg, maxSpaceForReqs);
 
   return finishAddingRequestsToPrePrepareMsg(prePrepareMsg, maxSpaceForReqs, 0, requiredRequestsNum);
@@ -864,7 +862,7 @@ std::pair<PrePrepareMsg *, bool> ReplicaImp::buildPrePrepareMessageByBatchSize(u
   }
 
   uint32_t maxSpaceForReqs = prePrepareMsg->remainingSizeForRequests();
-  ClientRequestMsg *nextRequest = (!requestsQueueOfPrimary.empty() ? requestsQueueOfPrimary.front() : nullptr);
+  ClientRequestMsg *nextRequest = requestsQueueOfPrimary.front();
   while (nextRequest != nullptr &&
          (maxSpaceForReqs - prePrepareMsg->remainingSizeForRequests() < requiredBatchSizeInBytes))
     nextRequest = addRequestToPrePrepareMessage(nextRequest, *prePrepareMsg, maxSpaceForReqs);
@@ -903,9 +901,8 @@ void ReplicaImp::startConsensusProcess(PrePrepareMsg *pp, bool isCreatedEarlier)
   SCOPED_MDC_PATH(CommitPathToMDCString(firstPath));
 
   LOG_INFO(CNSUS,
-           "Sending PrePrepare message"
-               << ", num remamining reqs in queue " << requestsQueueOfPrimary.size() << ", "
-               << KVLOG(pp->numberOfRequests()) << " correlation ids: " << pp->getBatchCorrelationIdAsString());
+           "Sending PrePrepare message" << KVLOG(pp->numberOfRequests())
+                                        << " correlation ids: " << pp->getBatchCorrelationIdAsString());
 
   consensus_times_.start(primaryLastUsedSeqNum);
 
@@ -5083,9 +5080,6 @@ void ReplicaImp::executeRequests(PrePrepareMsg *ppMsg, Bitmap &requestSet, Times
               "Executing all the requests of preprepare message with cid: " << ppMsg->getCid() << " with accumulation");
     {
       //      TimeRecorder scoped_timer1(*histograms_.executeWriteRequest);
-      uint16_t num_reqs = ppMsg->numberOfRequests();
-      std::chrono::time_point<std::chrono::steady_clock> exe_start_time_stamp;
-
       const concordUtils::SpanContext &span_context{""};
       auto span = concordUtils::startChildSpanFromContext(span_context, "bft_client_request");
       span.setTag("rid", config_.getreplicaId());
@@ -5094,21 +5088,10 @@ void ReplicaImp::executeRequests(PrePrepareMsg *ppMsg, Bitmap &requestSet, Times
       if (isCurrentPrimary()) {
         metric_consensus_end_to_core_exe_duration_.finishMeasurement(ppMsg->seqNumber());
         metric_core_exe_func_duration_.addStartTimeStamp(ppMsg->seqNumber());
-        exe_start_time_stamp = std::chrono::steady_clock::now();
       }
       bftRequestsHandler_->execute(*pAccumulatedRequests, time, ppMsg->getCid(), span);
       if (isCurrentPrimary()) {
         metric_core_exe_func_duration_.finishMeasurement(ppMsg->seqNumber());
-
-        if (num_reqs > 0) {
-          double exe_duration_per_req_ms =
-              static_cast<double>(std::chrono::duration_cast<std::chrono::milliseconds>(
-                                      std::chrono::steady_clock::now() - exe_start_time_stamp)
-                                      .count()) /
-              static_cast<double>(num_reqs);
-
-          LOG_INFO(GL, "Hanan Post exe of " << num_reqs << " Reqs took" << exe_duration_per_req_ms << " per req");
-        }
       }
     }
   } else {
