@@ -4742,7 +4742,9 @@ void ReplicaImp::tryToStartOrFinishExecution(bool requestMissingInfo) {
   if (lastExecutedSeqNum >= lastStableSeqNum + kWorkWindowSize) {
     if (startedExecution) {
       startedExecution = false;
+      LOG_INFO(GL, "Hanan 10 - call onExecutionFinish");
       onExecutionFinish();
+      LOG_INFO(GL, "Hanan 11 - finish onExecutionFinish");
     }
 
     return;
@@ -4757,7 +4759,9 @@ void ReplicaImp::tryToStartOrFinishExecution(bool requestMissingInfo) {
   if (!ready) {
     if (startedExecution) {
       startedExecution = false;
+      LOG_INFO(GL, "Hanan 12 - call onExecutionFinish");
       onExecutionFinish();
+      LOG_INFO(GL, "Hanan 13 - finish onExecutionFinish");
     } else {
       if (requestMissingInfo) {
         LOG_INFO(GL,
@@ -4953,6 +4957,7 @@ void ReplicaImp::executeAllPrePreparedRequests(bool allowParallelExecution,
     metric_post_exe_thread_idle_time_.finishMeasurement(0);
   }
   if (shouldRunRequestsInParallel) {
+    LOG_INFO(GL, "Hanan 15 - add job to post exe thread");
     PostExecJob *j = new PostExecJob(ppMsg, requestSet, time, *this);
     postExecThread_.add(j);
   } else {
@@ -5081,7 +5086,9 @@ void ReplicaImp::executeRequests(PrePrepareMsg *ppMsg, Bitmap &requestSet, Times
         metric_consensus_end_to_core_exe_duration_.finishMeasurement(ppMsg->seqNumber());
         metric_core_exe_func_duration_.addStartTimeStamp(ppMsg->seqNumber());
       }
+      LOG_INFO(GL, "Hanan 1 - execute is called");
       bftRequestsHandler_->execute(*pAccumulatedRequests, time, ppMsg->getCid(), span);
+      LOG_INFO(GL, "Hanan 2 - execute is done");
       if (isCurrentPrimary()) {
         metric_core_exe_func_duration_.finishMeasurement(ppMsg->seqNumber());
       }
@@ -5110,24 +5117,33 @@ void ReplicaImp::executeRequests(PrePrepareMsg *ppMsg, Bitmap &requestSet, Times
     }
   }
 
+  LOG_INFO(GL, "Hanan 3 - creating im");
   // send internal message that will call to finishExecutePrePrepareMsg(ppMsg);
   InternalMessage im =
       FinishPrePrepareExecutionInternalMsg{ppMsg, pAccumulatedRequests.release()};  // TODO(GG): check....
   getIncomingMsgsStorage().pushInternalMsg(std::move(im));
+
+  LOG_INFO(GL, "Hanan 4 - im sent");
 }
 
 void ReplicaImp::finishExecutePrePrepareMsg(PrePrepareMsg *ppMsg,
                                             IRequestsHandler::ExecutionRequestsQueue *pAccumulatedRequests) {
+  LOG_INFO(GL, "Hanan 5 - picked up im");
+
   activeExecutions_ = 0;
   if (isCurrentPrimary()) {
     metric_post_exe_thread_idle_time_.addStartTimeStamp(0);
     metric_post_exe_thread_active_time_.finishMeasurement(0);
   }
 
+  LOG_INFO(GL, "Hanan 6 - start sending responses");
   if (pAccumulatedRequests != nullptr) {
     sendResponses(ppMsg, *pAccumulatedRequests);
     delete pAccumulatedRequests;
   }
+
+  LOG_INFO(GL, "Hanan 6 - end sending responses");
+
   LOG_INFO(CNSUS, "Finished execution of request seqNum:" << ppMsg->seqNumber());
   uint64_t checkpointNum{};
   if ((lastExecutedSeqNum + 1) % checkpointWindowSize == 0) {
@@ -5143,7 +5159,9 @@ void ReplicaImp::finishExecutePrePrepareMsg(PrePrepareMsg *ppMsg,
     checkpoint_times_.start(lastExecutedSeqNum);
   }
 
+  LOG_INFO(GL, "Hanan 7 - call finalizeExecution");
   finalizeExecution();
+  LOG_INFO(GL, "Hanan 8 - finish finalizeExecution");
 
   if (ppMsg->numberOfRequests() > 0) bftRequestsHandler_->onFinishExecutingReadWriteRequests();
 
@@ -5163,6 +5181,7 @@ void ReplicaImp::finishExecutePrePrepareMsg(PrePrepareMsg *ppMsg,
     metric_post_exe_duration_.finishMeasurement(ppMsg->seqNumber());
   }
 
+  LOG_INFO(GL, "Hanan 9 - call tryToStartOrFinishExecution");
   tryToStartOrFinishExecution(false);
 }
 
