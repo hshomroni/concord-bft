@@ -103,6 +103,13 @@ BlockId Blockchain::deleteBlocksUntil(BlockId until) {
   return last_deleted_block;
 }
 
+// Compacts between 1 and genesis_block_id - 1 in order to physically reclaim space
+// from the last delRange()
+void Blockchain::compactBlocksUntil(BlockId until) {
+  native_client_->compactRange(v4blockchain::detail::BLOCKS_CF, generateKey(1), generateKey(until + 1));
+  LOG_INFO(V4_BLOCK_LOG, "Compacted up to " << until);
+}
+
 void Blockchain::deleteGenesisBlock() {
   ConcordAssertGT(genesis_block_id_, INVALID_BLOCK_ID);
   ConcordAssertLT(genesis_block_id_, last_reachable_block_id_);
