@@ -58,24 +58,32 @@ void ConnectionManager::stop() {
   stopped_ = true;
   status_->reset();
   acceptor_.close();
+
   for (auto& [_, sock] : connecting_) {
     (void)_;  // unused variable hack
     sock.first.close();
   }
+  connecting_.clear();
+
   for (auto& [id, conn] : connected_waiting_for_handshake_) {
     LOG_DEBUG(logger_, "Closing connection from: " << config_.selfId_ << ", to: " << id);
     syncCloseConnection(conn);
   }
+  connected_waiting_for_handshake_.clear();
 
   for (auto& [id, conn] : accepted_waiting_for_handshake_) {
     LOG_DEBUG(logger_, "Closing connection from: " << config_.selfId_ << ", to: " << id);
     syncCloseConnection(conn);
   }
+  accepted_waiting_for_handshake_.clear();
 
   for (auto& [id, conn] : connections_) {
     LOG_DEBUG(logger_, "Closing connection from: " << config_.selfId_ << ", to: " << id);
     syncCloseConnection(conn);
   }
+  connections_.clear();
+  status_->num_connections = 0;
+
   LOG_TRACE(logger_, "Done stopping connection manager for " << config_.selfId_);
 }
 
