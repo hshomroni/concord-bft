@@ -355,6 +355,11 @@ class ReplicaImp : public InternalReplicaApi, public ReplicaForStateTransfer {
   virtual ~ReplicaImp();
 
   void start() override;
+
+  // register a component's stop function to be run at the beginning of ReplicaImp's stop function.
+  // all components dependent of ReplicaImp running (and only those components) must register a stop func
+  void registerStopCallBack(std::function<void(void)> f) override { stopFuncs_.push_back(f); }
+
   void stop() override;
 
   std::shared_ptr<IInternalBFTClient> internalClient() const { return internalBFTClient_; }
@@ -625,6 +630,10 @@ class ReplicaImp : public InternalReplicaApi, public ReplicaForStateTransfer {
   void onCarrierMessage(CarrierMesssage* msg);
 
  private:
+  // vector holding "stop" functions of components dependent on replicaImp that need to stop before the
+  // replica is stopped
+  std::vector<std::function<void(void)>> stopFuncs_;
+
   void addTimers();
   void startConsensusProcess(PrePrepareMsg* pp, bool isCreatedEarlier);
   void startConsensusProcess(PrePrepareMsg* pp);

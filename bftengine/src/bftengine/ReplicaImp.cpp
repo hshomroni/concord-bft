@@ -4595,8 +4595,18 @@ ReplicaImp::ReplicaImp(bool firstTime,
 ReplicaImp::~ReplicaImp() {
   // TODO(GG): rewrite this method !!!!!!!! (notice that the order may be important here ).
   // TODO(GG): don't delete objects that are passed as params (TBD)
-  internalThreadPool.stop();
-  postExecThread_.stop();
+  if (!internalThreadPool.isStopped()) {
+    LOG_WARN(
+        GL,
+        "Internal Thread pool should have already been stopped. Stopping it now but race condition may still occur");
+    internalThreadPool.stop();
+  }
+
+  if (!postExecThread_.isStopped()) {
+    LOG_WARN(GL,
+             "Post exe Thread should have already been stopped. Stopping it now but race condition may still occur");
+    postExecThread_.stop();
+  }
 
   delete viewsManager;
   delete controller;
@@ -4613,7 +4623,16 @@ ReplicaImp::~ReplicaImp() {
 }
 
 void ReplicaImp::stop() {
-  LOG_DEBUG(GL, "ReplicaImp::stop started");
+  LOG_INFO(GL, "ReplicaImp::stop started");
+
+  // stop components dependent on ReplicaImp
+  for (auto f : stopFuncs_) {
+    f();
+  }
+
+  internalThreadPool.stop();
+  postExecThread_.stop();
+
   if (retransmissionsLogicEnabled) {
     timers_.cancel(retranTimer_);
   }
