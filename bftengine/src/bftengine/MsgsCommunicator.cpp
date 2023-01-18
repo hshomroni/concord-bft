@@ -21,7 +21,14 @@ using namespace bft::communication;
 MsgsCommunicator::MsgsCommunicator(ICommunication* comm,
                                    shared_ptr<IncomingMsgsStorage> incomingMsgsStorage,
                                    shared_ptr<IReceiver> msgReceiver)
-    : incomingMsgsStorage_(incomingMsgsStorage), msgReceiver_(msgReceiver), communication_(comm) {}
+    : incomingMsgsStorage_(incomingMsgsStorage), msgReceiver_(msgReceiver), communication_(comm) {
+  auto& registrar = concord::diagnostics::RegistrarSingleton::getInstance();
+
+  concord::diagnostics::StatusHandler handler(
+      "messages_communicator", "Msg Comm", [this]() { return incomingMsgsStorage_->status(); });
+
+  registrar.status.registerHandler(handler);
+}
 
 int MsgsCommunicator::startCommunication(uint16_t replicaId) {
   replicaId_ = replicaId;

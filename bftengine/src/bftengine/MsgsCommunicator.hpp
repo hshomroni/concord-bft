@@ -15,6 +15,7 @@
 #include "communication/ICommunication.hpp"
 #include "IncomingMsgsStorage.hpp"
 #include "messages/IncomingMsg.hpp"
+#include "diagnostics.h"
 
 namespace bftEngine::impl {
 

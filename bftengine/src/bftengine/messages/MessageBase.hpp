@@ -17,6 +17,12 @@
 #include "PrimitiveTypes.hpp"
 #include "MsgCode.hpp"
 #include "ReplicasInfo.hpp"
+#include <atomic>
+#include <unordered_map>
+#include <mutex>
+#include <set>
+#include <array>
+#include <bitset>
 
 namespace bftEngine {
 namespace impl {
@@ -40,7 +46,9 @@ class MessageBase {
 
   MessageBase(NodeIdType sender, Header *body, MsgSize size, bool ownerOfStorage);
 
-  void releaseOwnership() { owner_ = false; }
+  MessageBase(NodeIdType sender, Header *body, MsgSize size, bool ownerOfStorage, bool isIncoming);
+
+  void releaseOwnership();
 
   virtual ~MessageBase();
 
@@ -55,6 +63,8 @@ class MessageBase {
 
   static size_t serializeMsg(char *&buf, char *msg);
 
+  static void incIncomingExtrnMsgsBufAllocCount();
+
   static MessageBase *deserializeMsg(char *&buf, size_t bufLen, size_t &actualSize);
 
   MsgSize size() const { return msgSize_; }
@@ -67,6 +77,9 @@ class MessageBase {
 
   SpanContextSize spanContextSize() const { return msgBody_->spanContextSize; }
 
+  void setIsIncomingMsg(bool is_incoming) { isIncomingMsg_ = is_incoming; }
+  bool getIsIncomingMsg() { return isIncomingMsg_; }
+
   template <typename MessageT>
   concordUtils::SpanContext spanContext() const {
     return concordUtils::SpanContext{std::string(body() + sizeOfHeader<MessageT>(), spanContextSize())};
@@ -78,6 +91,14 @@ class MessageBase {
 #ifdef DEBUG_MEMORY_MSG
   static void printLiveMessages();
 #endif
+
+  // for diagnostics server:
+  static std::string getTotalNumExtrnIncomingMsgsObjsCreated();
+  static std::string getNumBuffsAllocatedForExtrnIncomingMsgs();
+  static std::string getNumBuffsFreedForExtrnIncomingMsgs();
+  static std::string getNumAliveExtrnIncomingMsgsObjsPerType();
+  static void updateDiagnosticsCountersOnBufRelease(MsgCode::Type msg_code);
+  static void updateDiagnosticsCountersOnBufAlloc(MsgCode::Type msg_code);
 
  protected:
   void writeObjAndMsgToLocalBuffer(char *buffer, size_t bufferLength, size_t *actualSize) const;
@@ -97,7 +118,10 @@ class MessageBase {
   // This might be the direct sender, but not the originator
   NodeIdType sender_;
   // true IFF this instance is not responsible for de-allocating the body:
+ public:
   bool owner_ = true;
+
+ protected:
   static constexpr uint32_t magicNumOfRawFormat = 0x5555897BU;
 
   template <typename MessageT>
@@ -111,6 +135,23 @@ class MessageBase {
 
   static constexpr uint64_t SPAN_CONTEXT_MAX_SIZE{1024};
   static constexpr uint32_t MAX_BATCH_SIZE{1024};
+
+  // For diagnostics server
+  bool isIncomingMsg_ = false;
+
+  static void incIncomingExtrnMsgsCount(MsgCode::Type &msg_code);
+  static void decIncomingExtrnMsgsCount(MsgCode::Type &msg_code);
+#if 0
+  static std::atomic<size_t> IncomingExtrnMsgsTotalCount;
+
+  static std::unordered_map<MsgCode::Type, std::atomic<size_t>> AliveIncomingMsgObjs;
+#endif
+  static std::array<std::atomic<size_t>, MsgCode::MaxMsgCodeVal> AliveIncomingExtrnMsgsBufs;
+  static std::bitset<MsgCode::MaxMsgCodeVal> IncomingExtrnMsgReceivedAtLeastOnceFlags;
+  static std::mutex debugMutex_;
+  static std::atomic<size_t> numIncomingExtrnMsgsBufAllocs;
+  static std::atomic<size_t> numIncomingExtrnMsgsBufFrees;
+
 #pragma pack(push, 1)
   struct RawHeaderOfObjAndMsg {
     uint32_t magicNum;
@@ -125,11 +166,14 @@ class MessageBase {
 // During de-serialization we first place the raw char array that we receive with the actual message into the msgBody_
 // of a MessageBase object to be able to get the msgType. Later during dispatch we need to create an object of the
 // actual message type from the MessageBase object holding the msgBody_ of the actual message.
-#define BFTENGINE_GEN_CONSTRUCT_FROM_BASE_MESSAGE(TrueTypeName)                                                     \
-  TrueTypeName(MessageBase *msgBase)                                                                                \
-      : MessageBase(                                                                                                \
-            msgBase->senderId(), reinterpret_cast<MessageBase::Header *>(msgBase->body()), msgBase->size(), true) { \
-    msgBase->releaseOwnership();                                                                                    \
+#define BFTENGINE_GEN_CONSTRUCT_FROM_BASE_MESSAGE(TrueTypeName)               \
+  TrueTypeName(MessageBase *msgBase)                                          \
+      : MessageBase(msgBase->senderId(),                                      \
+                    reinterpret_cast<MessageBase::Header *>(msgBase->body()), \
+                    msgBase->size(),                                          \
+                    true,                                                     \
+                    msgBase->getIsIncomingMsg()) {                            \
+    msgBase->releaseOwnership();                                              \
   }
 
 template <typename MessageT>

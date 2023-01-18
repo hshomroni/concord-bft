@@ -10,7 +10,7 @@
 // file.
 
 #include <cstring>
-
+#include <sstream>
 #include "MessageBase.hpp"
 
 #include "log/logger.hpp"
@@ -46,11 +46,57 @@ void MessageBase::printLiveMessages() {
 namespace bftEngine {
 namespace impl {
 
+// static class members for diagnostics server
+
+#if 0
+std::atomic<size_t> MessageBase::IncomingExtrnMsgsTotalCount{0};
+
+std::unordered_map<MsgCode::Type, std::atomic<size_t>> MessageBase::AliveIncomingMsgObjs{};
+#endif
+std::array<std::atomic<size_t>, MsgCode::MaxMsgCodeVal> MessageBase::AliveIncomingExtrnMsgsBufs{};
+std::bitset<MsgCode::MaxMsgCodeVal> MessageBase::IncomingExtrnMsgReceivedAtLeastOnceFlags{};
+std::mutex MessageBase::debugMutex_{};
+std::atomic<size_t> MessageBase::numIncomingExtrnMsgsBufAllocs{0};
+std::atomic<size_t> MessageBase::numIncomingExtrnMsgsBufFrees{0};
+// End of static class members for diagnostics server
+
 MessageBase::~MessageBase() {
 #ifdef DEBUG_MEMORY_MSG
   liveMessagesDebug.erase(this);
 #endif
-  if (owner_) std::free((char *)msgBody_);
+
+  if (owner_) {
+    if (isIncomingMsg_) {
+      MsgCode::Type msg_code = static_cast<MsgCode::Type>(msgBody_->msgType);
+      updateDiagnosticsCountersOnBufRelease(msg_code);
+    }
+    std::free((char *)msgBody_);
+  }
+}
+
+void MessageBase::updateDiagnosticsCountersOnBufAlloc(MsgCode::Type msg_code) {
+  incIncomingExtrnMsgsCount(msg_code);
+  if (!IncomingExtrnMsgReceivedAtLeastOnceFlags.test(msg_code)) {
+    std::lock_guard<std::mutex> lock(debugMutex_);
+    IncomingExtrnMsgReceivedAtLeastOnceFlags.set(msg_code);
+  }
+
+  // use "++" operator to ensure atomicity
+  // numIncomingExtrnMsgsBufFrees++;
+}
+
+void MessageBase::updateDiagnosticsCountersOnBufRelease(MsgCode::Type msg_code) {
+  decIncomingExtrnMsgsCount(msg_code);
+  // use "++" operator to ensure atomicity
+  numIncomingExtrnMsgsBufFrees++;
+}
+
+void MessageBase::releaseOwnership() {
+  if (!owner_) {
+    LOG_ERROR(GL, "Trying to release ownership of a MessageBase obj that is already not the buffer owner");
+  } else {
+    owner_ = false;
+  }
 }
 
 void MessageBase::shrinkToFit() {
@@ -102,16 +148,75 @@ MessageBase::MessageBase(NodeIdType sender, MsgType type, SpanContextSize spanCo
 #endif
 }
 
-MessageBase::MessageBase(NodeIdType sender, MessageBase::Header *body, MsgSize size, bool ownerOfStorage) {
-  msgBody_ = body;
-  msgSize_ = size;
-  storageSize_ = size;
-  sender_ = sender;
-  owner_ = ownerOfStorage;
+MessageBase::MessageBase(NodeIdType sender, MessageBase::Header *body, MsgSize size, bool ownerOfStorage)
+    : MessageBase(sender, body, size, ownerOfStorage, false) {}
 
+MessageBase::MessageBase(
+    NodeIdType sender, MessageBase::Header *body, MsgSize size, bool ownerOfStorage, bool isIncoming)
+    : msgBody_(body),
+      msgSize_(size),
+      storageSize_(size),
+      sender_(sender),
+      owner_(ownerOfStorage),
+      isIncomingMsg_(isIncoming) {
 #ifdef DEBUG_MEMORY_MSG
   liveMessagesDebug.insert(this);
 #endif
+}
+
+void MessageBase::incIncomingExtrnMsgsBufAllocCount() {
+  // use "++" operator to ensure atomicity
+  numIncomingExtrnMsgsBufAllocs++;
+}
+
+void MessageBase::incIncomingExtrnMsgsCount(MsgCode::Type &msg_code) {
+#if 0
+  if (AliveIncomingMsgObjs.find(msg_code) == AliveIncomingMsgObjs.end()) {
+    // new key insertion - use lock only in this case which is very rare, avoid perf hit on normal cases.
+    std::lock_guard<std::mutex> lock(debugMutex_);
+    // double check to solve case of race (from the first "if" to the actual locking)
+    if (AliveIncomingMsgObjs.find(msg_code) == AliveIncomingMsgObjs.end()) {
+      AliveIncomingMsgObjs[msg_code] = 1;
+    } else {
+      // use "++" operator to ensure atomicity
+      AliveIncomingMsgObjs[msg_code]++;
+    }
+  } else {
+    // use "++" operator to ensure atomicity
+    AliveIncomingMsgObjs[msg_code]++;
+  }
+
+  // use "++" operator to ensure atomicity
+  IncomingExtrnMsgsTotalCount++;
+#endif
+  // use "++" operator to ensure atomicity
+  numIncomingExtrnMsgsBufAllocs++;
+  AliveIncomingExtrnMsgsBufs[msg_code]++;
+}
+
+void MessageBase::decIncomingExtrnMsgsCount(MsgCode::Type &msg_code) {
+#if 0
+  if (AliveIncomingMsgObjs.find(msg_code) == AliveIncomingMsgObjs.end()) {
+    LOG_ERROR(GL, "Trying to dec a counter of a msg that hasn't been inserted yet, msg code: " << (msg_code));
+    return;
+  } else {
+    if (AliveIncomingMsgObjs[msg_code] == 0) {
+      LOG_ERROR(GL, "Trying to dec a counter that is 0, msg code: " << (msg_code));
+      return;
+    }
+    // use "--" operator to ensure atomicity
+    AliveIncomingMsgObjs[msg_code]--;
+  }
+
+#endif
+
+  if (AliveIncomingExtrnMsgsBufs[msg_code] == 0) {
+    LOG_ERROR(GL, "Trying to dec a counter of a msg that hasn't been inserted yet, msg code: " << (msg_code));
+    return;
+  } else {
+    // use "--" operator to ensure atomicity
+    AliveIncomingExtrnMsgsBufs[msg_code]--;
+  }
 }
 
 void MessageBase::validate(const ReplicasInfo &) const {
@@ -233,6 +338,41 @@ MessageBase *MessageBase::deserializeMsg(char *&buf, size_t bufLen, size_t &actu
   }
   actualSize = msgFilledFlagSize + msgSize;
   return msg;
+}
+
+// for diagnostics server:
+#if 0
+std::string MessageBase::getTotalNumExtrnIncomingMsgsObjsCreated() {
+  return std::string(" Total objs created for external incoming messages : " +
+                     std::to_string(MessageBase::IncomingExtrnMsgsTotalCount));
+}
+#endif
+
+std::string MessageBase::getNumBuffsAllocatedForExtrnIncomingMsgs() {
+  return (std::string(" Num buffer allocations for external incoming messages: " +
+                      std::to_string(MessageBase::numIncomingExtrnMsgsBufAllocs)));
+}
+std::string MessageBase::getNumBuffsFreedForExtrnIncomingMsgs() {
+  return (std::string(" Num buffer frees for external incoming messages: " +
+                      std::to_string(MessageBase::numIncomingExtrnMsgsBufFrees)));
+}
+std::string MessageBase::getNumAliveExtrnIncomingMsgsObjsPerType() {
+  std::ostringstream oss;
+  oss << " Alive extrnal incoming message objects per type: " << std::endl;
+  oss << " --------------------------------------- " << std::endl;
+
+  //  for (auto it = AliveIncomingMsgObjs.cbegin(); it != AliveIncomingMsgObjs.cend(); ++it) {
+  //    oss << " " << ((*it).first) << ": " << ((*it).second) << std::endl;
+  //  }
+
+  for (int i = 0; i < MsgCode::MaxMsgCodeVal; ++i) {
+    if (IncomingExtrnMsgReceivedAtLeastOnceFlags.test(i)) {
+      oss << " " << static_cast<MsgCode::Type>(i) << ": " << MessageBase::AliveIncomingExtrnMsgsBufs[i] << std::endl;
+    }
+  }
+
+  oss << " **All messages not on the list were never received by replica** ";
+  return oss.str();
 }
 
 }  // namespace impl

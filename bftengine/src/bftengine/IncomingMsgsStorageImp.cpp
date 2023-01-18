@@ -15,6 +15,7 @@
 #include "messages/InternalMessage.hpp"
 #include <future>
 #include "log/logger.hpp"
+#include <sstream>
 
 using std::queue;
 using namespace std::chrono;
@@ -197,6 +198,22 @@ void IncomingMsgsStorageImp::dispatchMessages(std::promise<void>& signalStarted)
     LOG_FATAL(GL, "Exception: " << e.what() << "exiting ...");
     std::terminate();
   }
+}
+
+std::string IncomingMsgsStorageImp::status() {
+  std::ostringstream oss;
+
+  bool is_running = isRunning();
+
+  oss << KVLOG(is_running) << std::endl;
+#if 0
+  oss << MessageBase::getTotalNumExtrnIncomingMsgsObjsCreated() << std::endl;
+#endif
+  oss << MessageBase::getNumBuffsAllocatedForExtrnIncomingMsgs() << std::endl;
+  oss << MessageBase::getNumBuffsFreedForExtrnIncomingMsgs() << std::endl;
+  oss << MessageBase::getNumAliveExtrnIncomingMsgsObjsPerType() << std::endl;
+
+  return oss.str();
 }
 
 }  // namespace bftEngine::impl
