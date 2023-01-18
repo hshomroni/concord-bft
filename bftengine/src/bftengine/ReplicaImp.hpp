@@ -752,9 +752,6 @@ class ReplicaImp : public InternalReplicaApi, public ReplicaForStateTransfer {
     DEFINE_SHARED_RECORDER(broadcastPrePrepare, 1, MAX_VALUE_MICROSECONDS, 3, Unit::MICROSECONDS);
     DEFINE_SHARED_RECORDER(sendPreparePartialToSelf, 1, MAX_VALUE_MICROSECONDS, 3, Unit::MICROSECONDS);
     DEFINE_SHARED_RECORDER(sendPartialProofToSelf, 1, MAX_VALUE_MICROSECONDS, 3, Unit::MICROSECONDS);
-
-    // msgs tracking:
-    DEFINE_SHARED_RECORDER(totalIncomingMsgs, 1, MAX_VALUE_MICROSECONDS, 3, Unit::COUNT);
   };
 
   Recorders histograms_;

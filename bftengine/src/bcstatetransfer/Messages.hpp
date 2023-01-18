@@ -40,6 +40,7 @@ class MsgType {
 };
 
 struct BCStateTranBaseMsg {
+  BCStateTranBaseMsg(uint16_t type) : BCStateTranBaseMsg(type, false) {}
   BCStateTranBaseMsg(uint16_t type, bool isIncomingMsg) : type(type), is_incoming_msg_(isIncomingMsg) {}
   uint16_t type;
   mutable bool is_incoming_msg_ = false;
@@ -65,12 +66,8 @@ class VariableSizeMsg {
 };
 
 struct AskForCheckpointSummariesMsg : public BCStateTranBaseMsg {
-  AskForCheckpointSummariesMsg() : AskForCheckpointSummariesMsg(false) {}
-
-  AskForCheckpointSummariesMsg(bool isIncomingMsg)
-      : BCStateTranBaseMsg{MsgType::AskForCheckpointSummaries, isIncomingMsg},
-        msgSeqNum{},
-        minRelevantCheckpointNum{} {}
+  AskForCheckpointSummariesMsg()
+      : BCStateTranBaseMsg{MsgType::AskForCheckpointSummaries}, msgSeqNum{}, minRelevantCheckpointNum{} {}
 
   uint64_t msgSeqNum;
   uint64_t minRelevantCheckpointNum;
@@ -171,10 +168,8 @@ struct CheckpointSummaryMsg : public BCStateTranBaseMsg {
 };
 
 struct FetchBlocksMsg : public BCStateTranBaseMsg {
-  FetchBlocksMsg() : FetchBlocksMsg(false) {}
-
-  FetchBlocksMsg(bool isIncomingMsg)
-      : BCStateTranBaseMsg{MsgType::FetchBlocks, isIncomingMsg},
+  FetchBlocksMsg()
+      : BCStateTranBaseMsg{MsgType::FetchBlocks},
         msgSeqNum{},
         minBlockId{},
         maxBlockId{},
@@ -191,10 +186,8 @@ struct FetchBlocksMsg : public BCStateTranBaseMsg {
 };
 
 struct FetchResPagesMsg : public BCStateTranBaseMsg {
-  FetchResPagesMsg() : FetchResPagesMsg(false) {}
-
-  FetchResPagesMsg(bool isIncomingMsg)
-      : BCStateTranBaseMsg{MsgType::FetchResPages, isIncomingMsg},
+  FetchResPagesMsg()
+      : BCStateTranBaseMsg{MsgType::FetchResPages},
         msgSeqNum{},
         lastCheckpointKnownToRequester{},
         requiredCheckpointNum{},
@@ -224,12 +217,8 @@ struct RejectFetchingMsg : public BCStateTranBaseMsg {
     };
   };
   RejectFetchingMsg() = delete;
-
-  RejectFetchingMsg(uint16_t rejCode, uint64_t reqMsgSeqNum) : RejectFetchingMsg(rejCode, reqMsgSeqNum, false) {}
-  RejectFetchingMsg(uint16_t rejCode, uint64_t reqMsgSeqNum, bool isIncomingMsg)
-      : BCStateTranBaseMsg{MsgType::RejectFetching, isIncomingMsg},
-        requestMsgSeqNum{reqMsgSeqNum},
-        rejectionCode{rejCode} {}
+  RejectFetchingMsg(uint16_t rejCode, uint64_t reqMsgSeqNum)
+      : BCStateTranBaseMsg{MsgType::RejectFetching}, requestMsgSeqNum{reqMsgSeqNum}, rejectionCode{rejCode} {}
 
   uint64_t requestMsgSeqNum;
   uint16_t rejectionCode;

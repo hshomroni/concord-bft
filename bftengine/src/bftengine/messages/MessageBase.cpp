@@ -47,12 +47,6 @@ namespace bftEngine {
 namespace impl {
 
 // static class members for diagnostics server
-
-#if 0
-std::atomic<size_t> MessageBase::IncomingExtrnMsgsTotalCount{0};
-
-std::unordered_map<MsgCode::Type, std::atomic<size_t>> MessageBase::AliveIncomingMsgObjs{};
-#endif
 std::array<std::atomic<size_t>, MsgCode::MaxMsgCodeVal> MessageBase::AliveIncomingExtrnMsgsBufs{};
 std::bitset<MsgCode::MaxMsgCodeVal> MessageBase::IncomingExtrnMsgReceivedAtLeastOnceFlags{};
 std::mutex MessageBase::debugMutex_{};
@@ -163,62 +157,6 @@ MessageBase::MessageBase(
   liveMessagesDebug.insert(this);
 #endif
 }
-
-void MessageBase::incIncomingExtrnMsgsBufAllocCount() {
-  // use "++" operator to ensure atomicity
-  numIncomingExtrnMsgsBufAllocs++;
-}
-
-void MessageBase::incIncomingExtrnMsgsCount(MsgCode::Type &msg_code) {
-#if 0
-  if (AliveIncomingMsgObjs.find(msg_code) == AliveIncomingMsgObjs.end()) {
-    // new key insertion - use lock only in this case which is very rare, avoid perf hit on normal cases.
-    std::lock_guard<std::mutex> lock(debugMutex_);
-    // double check to solve case of race (from the first "if" to the actual locking)
-    if (AliveIncomingMsgObjs.find(msg_code) == AliveIncomingMsgObjs.end()) {
-      AliveIncomingMsgObjs[msg_code] = 1;
-    } else {
-      // use "++" operator to ensure atomicity
-      AliveIncomingMsgObjs[msg_code]++;
-    }
-  } else {
-    // use "++" operator to ensure atomicity
-    AliveIncomingMsgObjs[msg_code]++;
-  }
-
-  // use "++" operator to ensure atomicity
-  IncomingExtrnMsgsTotalCount++;
-#endif
-  // use "++" operator to ensure atomicity
-  numIncomingExtrnMsgsBufAllocs++;
-  AliveIncomingExtrnMsgsBufs[msg_code]++;
-}
-
-void MessageBase::decIncomingExtrnMsgsCount(MsgCode::Type &msg_code) {
-#if 0
-  if (AliveIncomingMsgObjs.find(msg_code) == AliveIncomingMsgObjs.end()) {
-    LOG_ERROR(GL, "Trying to dec a counter of a msg that hasn't been inserted yet, msg code: " << (msg_code));
-    return;
-  } else {
-    if (AliveIncomingMsgObjs[msg_code] == 0) {
-      LOG_ERROR(GL, "Trying to dec a counter that is 0, msg code: " << (msg_code));
-      return;
-    }
-    // use "--" operator to ensure atomicity
-    AliveIncomingMsgObjs[msg_code]--;
-  }
-
-#endif
-
-  if (AliveIncomingExtrnMsgsBufs[msg_code] == 0) {
-    LOG_ERROR(GL, "Trying to dec a counter of a msg that hasn't been inserted yet, msg code: " << (msg_code));
-    return;
-  } else {
-    // use "--" operator to ensure atomicity
-    AliveIncomingExtrnMsgsBufs[msg_code]--;
-  }
-}
-
 void MessageBase::validate(const ReplicasInfo &) const {
   LOG_DEBUG(GL, "Calling MessageBase::validate on a message of type " << type());
 }
@@ -341,12 +279,6 @@ MessageBase *MessageBase::deserializeMsg(char *&buf, size_t bufLen, size_t &actu
 }
 
 // for diagnostics server:
-#if 0
-std::string MessageBase::getTotalNumExtrnIncomingMsgsObjsCreated() {
-  return std::string(" Total objs created for external incoming messages : " +
-                     std::to_string(MessageBase::IncomingExtrnMsgsTotalCount));
-}
-#endif
 
 std::string MessageBase::getNumBuffsAllocatedForExtrnIncomingMsgs() {
   return (std::string(" Num buffer allocations for external incoming messages: " +
@@ -361,9 +293,6 @@ std::string MessageBase::getNumAliveExtrnIncomingMsgsObjsPerType() {
   oss << " Alive extrnal incoming message objects per type: " << std::endl;
   oss << " --------------------------------------- " << std::endl;
 
-  //  for (auto it = AliveIncomingMsgObjs.cbegin(); it != AliveIncomingMsgObjs.cend(); ++it) {
-  //    oss << " " << ((*it).first) << ": " << ((*it).second) << std::endl;
-  //  }
 
   for (int i = 0; i < MsgCode::MaxMsgCodeVal; ++i) {
     if (IncomingExtrnMsgReceivedAtLeastOnceFlags.test(i)) {

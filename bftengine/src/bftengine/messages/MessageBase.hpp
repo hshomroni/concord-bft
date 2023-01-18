@@ -18,9 +18,7 @@
 #include "MsgCode.hpp"
 #include "ReplicasInfo.hpp"
 #include <atomic>
-#include <unordered_map>
 #include <mutex>
-#include <set>
 #include <array>
 #include <bitset>
 
@@ -118,10 +116,7 @@ class MessageBase {
   // This might be the direct sender, but not the originator
   NodeIdType sender_;
   // true IFF this instance is not responsible for de-allocating the body:
- public:
   bool owner_ = true;
-
- protected:
   static constexpr uint32_t magicNumOfRawFormat = 0x5555897BU;
 
   template <typename MessageT>
@@ -138,14 +133,6 @@ class MessageBase {
 
   // For diagnostics server
   bool isIncomingMsg_ = false;
-
-  static void incIncomingExtrnMsgsCount(MsgCode::Type &msg_code);
-  static void decIncomingExtrnMsgsCount(MsgCode::Type &msg_code);
-#if 0
-  static std::atomic<size_t> IncomingExtrnMsgsTotalCount;
-
-  static std::unordered_map<MsgCode::Type, std::atomic<size_t>> AliveIncomingMsgObjs;
-#endif
   static std::array<std::atomic<size_t>, MsgCode::MaxMsgCodeVal> AliveIncomingExtrnMsgsBufs;
   static std::bitset<MsgCode::MaxMsgCodeVal> IncomingExtrnMsgReceivedAtLeastOnceFlags;
   static std::mutex debugMutex_;

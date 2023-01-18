@@ -1556,7 +1556,7 @@ void BCStateTran::sendAskForCheckpointSummariesMsg() {
   ConcordAssertEQ(getFetchingState(), FetchingState::GettingCheckpointSummaries);
   metrics_.sent_ask_for_checkpoint_summaries_msg_++;
 
-  AskForCheckpointSummariesMsg msg{};
+  AskForCheckpointSummariesMsg msg;
   lastTimeSentAskForCheckpointSummariesMsg = getMonotonicTimeMilli();
   lastMsgSeqNum_ = uniqueMsgSeqNum();
 #ifdef ENABLE_ALL_METRICS

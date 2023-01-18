@@ -1242,79 +1242,65 @@ void PreProcessor::msgProcessingLoop() {
         delete msg;
         continue;
       }
-
       switch (msg->type()) {
         case (MsgCode::ClientBatchRequest): {
           auto msgPtr = make_unique<ClientBatchRequestMsg>(msg);
-          delete msg;
-
           if (validateMessage(msgPtr.get())) {
             onMessage<ClientBatchRequestMsg>(std::move(msgPtr));
           } else {
             preProcessorMetrics_.preProcReqInvalid++;
           }
-
           break;
         }
         case (MsgCode::ClientPreProcessRequest): {
           auto msgPtr = make_unique<ClientPreProcessRequestMsg>(msg);
-          delete msg;
           if (validateMessage(msgPtr.get())) {
             onMessage<ClientPreProcessRequestMsg>(std::move(msgPtr));
           } else {
             preProcessorMetrics_.preProcReqInvalid++;
           }
-
           break;
         }
         case (MsgCode::PreProcessRequest): {
           auto msgPtr = make_unique<PreProcessRequestMsg>(msg);
-          delete msg;
           if (validateMessage(msgPtr.get())) {
             onMessage<PreProcessRequestMsg>(std::move(msgPtr));
           } else {
             preProcessorMetrics_.preProcReqInvalid++;
           }
-
           break;
         }
         case (MsgCode::PreProcessBatchRequest): {
           auto msgPtr = make_unique<PreProcessBatchRequestMsg>(msg);
-          delete msg;
           if (validateMessage(msgPtr.get())) {
             onMessage<PreProcessBatchRequestMsg>(std::move(msgPtr));
           } else {
             preProcessorMetrics_.preProcReqInvalid++;
           }
-
           break;
         }
         case (MsgCode::PreProcessReply): {
           auto msgPtr = make_unique<PreProcessReplyMsg>(msg);
-          delete msg;
           if (validateMessage(msgPtr.get())) {
             onMessage<PreProcessReplyMsg>(std::move(msgPtr));
           } else {
             preProcessorMetrics_.preProcReqInvalid++;
           }
-
           break;
         }
         case (MsgCode::PreProcessBatchReply): {
           auto msgPtr = make_unique<PreProcessBatchReplyMsg>(msg);
-          delete msg;
           if (validateMessage(msgPtr.get())) {
             onMessage<PreProcessBatchReplyMsg>(std::move(msgPtr));
           } else {
             preProcessorMetrics_.preProcReqInvalid++;
           }
-
           break;
         }
         default:
           LOG_ERROR(logger(), "Unknown message" << KVLOG(msg->type()));
-          delete msg;
       }
+      delete msg;
     }
   }
 }

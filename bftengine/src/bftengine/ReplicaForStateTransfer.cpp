@@ -128,7 +128,6 @@ void ReplicaForStateTransfer::onMessage(std::unique_ptr<StateTransferMsg> msg) {
 //
 void ReplicaForStateTransfer::freeStateTransferMsg(char *m) {
   // This method may be called by external threads
-
   char *p = (m - sizeof(MessageBase::Header));
   std::free(p);
 }
