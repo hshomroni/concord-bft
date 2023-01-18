@@ -69,7 +69,6 @@ MessageBase::~MessageBase() {
 }
 
 void MessageBase::updateDiagnosticsCountersOnBufAlloc(MsgCode::Type msg_code) {
-
   if (!IncomingExtrnMsgReceivedAtLeastOnceFlags.test(msg_code)) {
     std::lock_guard<std::mutex> lock(debugMutex_);
     IncomingExtrnMsgReceivedAtLeastOnceFlags.set(msg_code);
@@ -81,7 +80,6 @@ void MessageBase::updateDiagnosticsCountersOnBufAlloc(MsgCode::Type msg_code) {
 }
 
 void MessageBase::updateDiagnosticsCountersOnBufRelease(MsgCode::Type msg_code) {
-
   if (AliveIncomingExtrnMsgsBufs[msg_code] == 0) {
     LOG_ERROR(GL, "Trying to dec a counter of a msg that hasn't been inserted yet, msg code: " << (msg_code));
     return;
@@ -161,7 +159,6 @@ MessageBase::MessageBase(
       sender_(sender),
       owner_(ownerOfStorage),
       isIncomingMsg_(isIncoming) {
-
 #ifdef DEBUG_MEMORY_MSG
   liveMessagesDebug.insert(this);
 #endif
