@@ -69,18 +69,26 @@ MessageBase::~MessageBase() {
 }
 
 void MessageBase::updateDiagnosticsCountersOnBufAlloc(MsgCode::Type msg_code) {
-  incIncomingExtrnMsgsCount(msg_code);
+
   if (!IncomingExtrnMsgReceivedAtLeastOnceFlags.test(msg_code)) {
     std::lock_guard<std::mutex> lock(debugMutex_);
     IncomingExtrnMsgReceivedAtLeastOnceFlags.set(msg_code);
   }
 
   // use "++" operator to ensure atomicity
-  // numIncomingExtrnMsgsBufFrees++;
+  numIncomingExtrnMsgsBufAllocs++;
+  AliveIncomingExtrnMsgsBufs[msg_code]++;
 }
 
 void MessageBase::updateDiagnosticsCountersOnBufRelease(MsgCode::Type msg_code) {
-  decIncomingExtrnMsgsCount(msg_code);
+
+  if (AliveIncomingExtrnMsgsBufs[msg_code] == 0) {
+    LOG_ERROR(GL, "Trying to dec a counter of a msg that hasn't been inserted yet, msg code: " << (msg_code));
+    return;
+  } else {
+    // use "--" operator to ensure atomicity
+    AliveIncomingExtrnMsgsBufs[msg_code]--;
+  }
   // use "++" operator to ensure atomicity
   numIncomingExtrnMsgsBufFrees++;
 }
@@ -153,10 +161,12 @@ MessageBase::MessageBase(
       sender_(sender),
       owner_(ownerOfStorage),
       isIncomingMsg_(isIncoming) {
+
 #ifdef DEBUG_MEMORY_MSG
   liveMessagesDebug.insert(this);
 #endif
 }
+
 void MessageBase::validate(const ReplicasInfo &) const {
   LOG_DEBUG(GL, "Calling MessageBase::validate on a message of type " << type());
 }
@@ -279,7 +289,6 @@ MessageBase *MessageBase::deserializeMsg(char *&buf, size_t bufLen, size_t &actu
 }
 
 // for diagnostics server:
-
 std::string MessageBase::getNumBuffsAllocatedForExtrnIncomingMsgs() {
   return (std::string(" Num buffer allocations for external incoming messages: " +
                       std::to_string(MessageBase::numIncomingExtrnMsgsBufAllocs)));
@@ -293,14 +302,13 @@ std::string MessageBase::getNumAliveExtrnIncomingMsgsObjsPerType() {
   oss << " Alive extrnal incoming message objects per type: " << std::endl;
   oss << " --------------------------------------- " << std::endl;
 
-
   for (int i = 0; i < MsgCode::MaxMsgCodeVal; ++i) {
     if (IncomingExtrnMsgReceivedAtLeastOnceFlags.test(i)) {
       oss << " " << static_cast<MsgCode::Type>(i) << ": " << MessageBase::AliveIncomingExtrnMsgsBufs[i] << std::endl;
     }
   }
 
-  oss << " **All messages not on the list were never received by replica** ";
+  oss << " ** All messages not on the list were never received by replica ** ";
   return oss.str();
 }
 

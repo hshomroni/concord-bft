@@ -61,8 +61,6 @@ class MessageBase {
 
   static size_t serializeMsg(char *&buf, char *msg);
 
-  static void incIncomingExtrnMsgsBufAllocCount();
-
   static MessageBase *deserializeMsg(char *&buf, size_t bufLen, size_t &actualSize);
 
   MsgSize size() const { return msgSize_; }
@@ -115,8 +113,10 @@ class MessageBase {
   MsgSize storageSize_ = 0;
   // This might be the direct sender, but not the originator
   NodeIdType sender_;
+
   // true IFF this instance is not responsible for de-allocating the body:
   bool owner_ = true;
+
   static constexpr uint32_t magicNumOfRawFormat = 0x5555897BU;
 
   template <typename MessageT>
